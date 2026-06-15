@@ -45,6 +45,10 @@ export function NoticeTable({
                 <th>中文内容</th>
                 <th>英文标题</th>
                 <th>英文内容</th>
+                <th>泰文标题</th>
+                <th>泰文内容</th>
+                <th>韩文标题</th>
+                <th>韩文内容</th>
                 <th>创建时间</th>
                 <th>操作</th>
               </tr>
@@ -57,6 +61,10 @@ export function NoticeTable({
                   <td className="cell-clip">{notice.content}</td>
                   <td>{notice.englishTitle || '-'}</td>
                   <td className="cell-clip">{notice.englishContent || '-'}</td>
+                  <td>{notice.thaiTitle || '-'}</td>
+                  <td className="cell-clip">{notice.thaiContent || '-'}</td>
+                  <td>{notice.koreanTitle || '-'}</td>
+                  <td className="cell-clip">{notice.koreanContent || '-'}</td>
                   <td>{formatTime(notice.createTime)}</td>
                   <td>
                     <div className="table-actions">

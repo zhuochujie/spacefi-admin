@@ -15,7 +15,7 @@ import {
   type AdminStats,
   type BalanceLogResponse,
   type DividendLogResponse,
-  type DividendRule,
+  type DividendRuleGroup,
   type MinerResponse,
   type NoticeListResponse,
   type UserListResponse,
@@ -116,9 +116,10 @@ export function useUserBalanceLogsQuery(
   searchKey: number,
 ) {
   return useQuery<BalanceLogResponse>({
-    queryKey: ['admin-balance-logs', token, accountId, searchKey],
+    queryKey: ['admin-balance-logs', token, accountId, filters, searchKey],
     queryFn: () => getBalanceLogs(token, accountId!, buildBalanceSearchParams(filters)),
     enabled: enabled && accountId != null && searchKey > 0,
+    placeholderData: (previous) => previous,
   })
 }
 
@@ -140,7 +141,7 @@ export function useAdminMinersQuery(token: string, enabled: boolean) {
 }
 
 export function useDividendRulesQuery(token: string, enabled: boolean) {
-  return useQuery<DividendRule[]>({
+  return useQuery<DividendRuleGroup[]>({
     queryKey: ['admin-dividend-rules', token],
     queryFn: () => getDividendRules(token),
     enabled,

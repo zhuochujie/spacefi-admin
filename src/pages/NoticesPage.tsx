@@ -50,6 +50,10 @@ export function NoticesPage() {
         content: payload.content ?? '',
         ...(payload.englishTitle ? { englishTitle: payload.englishTitle } : {}),
         ...(payload.englishContent ? { englishContent: payload.englishContent } : {}),
+        ...(payload.thaiTitle ? { thaiTitle: payload.thaiTitle } : {}),
+        ...(payload.thaiContent ? { thaiContent: payload.thaiContent } : {}),
+        ...(payload.koreanTitle ? { koreanTitle: payload.koreanTitle } : {}),
+        ...(payload.koreanContent ? { koreanContent: payload.koreanContent } : {}),
       })
     },
     onSuccess: async () => {

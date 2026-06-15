@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { AdminConfigItem } from '../../api'
+import { formatDividendBp } from '../../lib/dividends'
+import { formatTokenAmount } from '../../lib/format'
 
 type ConfigModalProps = {
   open: boolean
@@ -22,16 +24,32 @@ export function ConfigModal({
   const [localError, setLocalError] = useState('')
 
   if (!open || !config) return null
+  function formatSecondsAsDays(nextValue: string) {
+    const days = Number(nextValue) / 86400
+    return `${days.toFixed(2).replace(/\.?0+$/, '')}天`
+  }
+
+  const isWeiConfig = config.key.endsWith('WEI')
+  const isBpConfig = config.key.endsWith('BP')
+  const isSecondsConfig = config.key.endsWith('SECONDS')
+  const isNumericValue = /^\d+$/.test(value.trim())
+  const readableValue = isWeiConfig && isNumericValue ? formatTokenAmount(value.trim()) : '-'
+  const readableBp = isBpConfig && isNumericValue ? formatDividendBp(Number(value.trim())) : '-'
+  const readableDays = isSecondsConfig && isNumericValue ? formatSecondsAsDays(value.trim()) : '-'
+  const nextValue = value.trim()
+  const hasChanges = nextValue !== config.value.trim()
+  const canSubmit = isNumericValue && hasChanges && !busy
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLocalError('')
 
-    const nextValue = value.trim()
     if (!/^\d+$/.test(nextValue)) {
       setLocalError('配置值必须是非负整数字符串。')
       return
     }
+
+    if (!hasChanges) return
 
     onSubmit(nextValue)
   }
@@ -70,6 +88,9 @@ export function ConfigModal({
                 onChange={(event) => setValue(event.target.value)}
                 placeholder="请输入非负整数"
               />
+              {isWeiConfig ? <span className="field-hint">对应数量：{readableValue}</span> : null}
+              {isBpConfig ? <span className="field-hint">对应比例：{readableBp}</span> : null}
+              {isSecondsConfig ? <span className="field-hint">对应天数：{readableDays}</span> : null}
             </div>
             <div className="field compact config-desc-field">
               <label>说明</label>
@@ -81,7 +102,7 @@ export function ConfigModal({
             <button type="button" className="secondary" onClick={onClose} disabled={busy}>
               取消
             </button>
-            <button type="submit" className="primary" disabled={busy}>
+            <button type="submit" className="primary" disabled={!canSubmit}>
               {busy ? '保存中...' : '保存'}
             </button>
           </div>

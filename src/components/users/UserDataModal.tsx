@@ -1,6 +1,7 @@
+import { useEffect, useRef } from 'react'
 import type { BalanceLogItem, MinerItem, UserRecord } from '../../api'
 import type { BalanceFilters } from '../../hooks/useAdminData'
-import { formatTime, formatTokenAmount, shortAddress } from '../../lib/format'
+import { formatTime, formatTokenAmount, formatTokenAmountFixed, shortAddress } from '../../lib/format'
 
 const balanceLogTypeOptions = [
   { value: 'miner_reward', label: '矿机奖励' },
@@ -12,6 +13,10 @@ const balanceLogTypeOptions = [
   { value: 'vip_dividend', label: 'VIP 分红' },
   { value: 'node_dividend', label: '节点分红' },
 ]
+
+function formatBalanceLogType(type: string) {
+  return balanceLogTypeOptions.find((option) => option.value === type)?.label ?? type
+}
 
 type UserDataModalProps = {
   open: boolean
@@ -27,6 +32,7 @@ type UserDataModalProps = {
   error?: string
   onClose: () => void
   onFiltersChange: (filters: BalanceFilters) => void
+  onPageChange: (page: number) => void
   onSearch: () => void
 }
 
@@ -44,6 +50,7 @@ export function UserDataModal({
   error,
   onClose,
   onFiltersChange,
+  onPageChange,
   onSearch,
 }: UserDataModalProps) {
   if (!open || !user) return null
@@ -104,7 +111,7 @@ export function UserDataModal({
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => onFiltersChange({ ...filters, page: Math.max(1, filters.page - 1) })}
+                  onClick={() => onPageChange(Math.max(1, filters.page - 1))}
                   disabled={filters.page <= 1}
                 >
                   上一页
@@ -119,7 +126,7 @@ export function UserDataModal({
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => onFiltersChange({ ...filters, page: Math.min(logPages, filters.page + 1) })}
+                  onClick={() => onPageChange(Math.min(logPages, filters.page + 1))}
                   disabled={filters.page >= logPages}
                 >
                   下一页
@@ -146,10 +153,34 @@ function TypeMultiSelect({
   value: string[]
   onChange: (value: string[]) => void
 }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null)
   const selectedLabels = balanceLogTypeOptions
     .filter((option) => value.includes(option.value))
     .map((option) => option.label)
   const summary = selectedLabels.length > 0 ? selectedLabels.join('、') : '全部类型'
+
+  useEffect(() => {
+    function closeOnOutsideClick(event: PointerEvent) {
+      const details = detailsRef.current
+      if (details?.open && !details.contains(event.target as Node)) {
+        details.open = false
+      }
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && detailsRef.current?.open) {
+        detailsRef.current.open = false
+        detailsRef.current.querySelector('summary')?.focus()
+      }
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [])
 
   function toggleType(type: string) {
     if (value.includes(type)) {
@@ -161,7 +192,11 @@ function TypeMultiSelect({
   }
 
   return (
-    <details className={value.length > 0 ? 'multi-select has-value' : 'multi-select'} id="balance-type">
+    <details
+      ref={detailsRef}
+      className={value.length > 0 ? 'multi-select has-value' : 'multi-select'}
+      id="balance-type"
+    >
       <summary>{summary}</summary>
       <div className="multi-select-menu">
         {balanceLogTypeOptions.map((option) => {
@@ -218,7 +253,7 @@ function BalanceLogTable({
           {logs.map((item) => (
             <tr key={item.id}>
               <td>{item.id}</td>
-              <td>{item.type}</td>
+              <td>{formatBalanceLogType(item.type)}</td>
               <td>{item.token}</td>
               <td>{formatTokenAmount(item.amount)}</td>
               <td>{formatTokenAmount(item.balanceBefore)}</td>
@@ -248,15 +283,15 @@ function MinerList({ miners, busy }: { miners: MinerItem[]; busy: boolean }) {
           <dl>
             <div>
               <dt>预计收益</dt>
-              <dd>{miner.expectedReward}</dd>
+              <dd>{formatTokenAmountFixed(miner.expectedReward, 5)}</dd>
             </div>
             <div>
               <dt>已产出</dt>
-              <dd>{miner.producedReward}</dd>
+              <dd>{formatTokenAmountFixed(miner.producedReward, 5)}</dd>
             </div>
             <div>
               <dt>周期</dt>
-              <dd>{miner.cycle}</dd>
+              <dd>{formatCycleDays(miner.cycle)}</dd>
             </div>
             <div>
               <dt>结束时间</dt>
@@ -267,4 +302,9 @@ function MinerList({ miners, busy }: { miners: MinerItem[]; busy: boolean }) {
       ))}
     </div>
   )
+}
+
+function formatCycleDays(cycleSeconds: number) {
+  const days = cycleSeconds / 86400
+  return `${days.toFixed(2).replace(/\.?0+$/, '')} 天`
 }

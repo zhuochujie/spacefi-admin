@@ -1,4 +1,6 @@
 import type { AdminConfigItem } from '../../api'
+import { formatDividendBp } from '../../lib/dividends'
+import { formatTokenAmount } from '../../lib/format'
 
 type ConfigTableProps = {
   configs: AdminConfigItem[]
@@ -7,6 +9,26 @@ type ConfigTableProps = {
 }
 
 export function ConfigTable({ configs, busy, onEdit }: ConfigTableProps) {
+  function formatSecondsAsDays(value: string) {
+    const days = Number(value) / 86400
+    return `${days.toFixed(2).replace(/\.?0+$/, '')}天`
+  }
+
+  function formatConfigValue(config: AdminConfigItem) {
+    if (config.key.endsWith('BP') && /^\d+$/.test(config.value)) {
+      return `${formatDividendBp(Number(config.value))} (${config.value})`
+    }
+
+    if (config.key.endsWith('SECONDS') && /^\d+$/.test(config.value)) {
+      return `${formatSecondsAsDays(config.value)} (${config.value})`
+    }
+
+    if (!config.key.endsWith('WEI')) return config.value
+
+    const readableValue = formatTokenAmount(config.value)
+    return `${readableValue} (${config.value})`
+  }
+
   return (
     <section className="panel list-panel">
       <div className="panel-head">
@@ -31,7 +53,7 @@ export function ConfigTable({ configs, busy, onEdit }: ConfigTableProps) {
               {configs.map((config) => (
                 <tr key={config.key}>
                   <td>{config.key}</td>
-                  <td>{config.value}</td>
+                  <td>{formatConfigValue(config)}</td>
                   <td>{config.desc}</td>
                   <td>
                     <div className="table-actions">

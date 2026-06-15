@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { AdminMiner, CreateMinerPayload, UpdateMinerPayload } from '../../api'
+import { formatTokenAmount } from '../../lib/format'
 
 type MinerModalProps = {
   open: boolean
@@ -22,7 +23,6 @@ export function MinerModal({
   const [name, setName] = useState(miner?.name ?? '')
   const [price, setPrice] = useState(miner?.price ?? '')
   const [expectedReward, setExpectedReward] = useState(miner?.expectedReward ?? '')
-  const [remainingQuantity, setRemainingQuantity] = useState(String(miner?.remainingQuantity ?? 0))
   const [desc, setDesc] = useState(miner?.desc ?? '')
   const [isPurchasable, setIsPurchasable] = useState(miner?.isPurchasable ?? false)
   const [localError, setLocalError] = useState('')
@@ -30,17 +30,32 @@ export function MinerModal({
   if (!open) return null
 
   const editing = Boolean(miner)
+  const formattedPrice = /^\d+$/.test(price.trim()) ? formatTokenAmount(price.trim()) : '-'
+  const formattedExpectedReward = /^\d+$/.test(expectedReward.trim())
+    ? formatTokenAmount(expectedReward.trim())
+    : '-'
+  const nextId = id.trim()
+  const nextName = name.trim()
+  const nextPrice = price.trim()
+  const nextExpectedReward = expectedReward.trim()
+  const nextDesc = desc.trim()
+  const isValid =
+    (editing || Boolean(nextId)) &&
+    Boolean(nextName) &&
+    /^\d+$/.test(nextPrice) &&
+    /^\d+$/.test(nextExpectedReward)
+  const hasChanges = !editing || (
+    nextName !== miner?.name.trim() ||
+    nextPrice !== miner.price.trim() ||
+    nextExpectedReward !== miner.expectedReward.trim() ||
+    nextDesc !== (miner.desc ?? '').trim() ||
+    isPurchasable !== miner.isPurchasable
+  )
+  const canSubmit = isValid && hasChanges && !busy
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLocalError('')
-
-    const nextId = id.trim()
-    const nextName = name.trim()
-    const nextPrice = price.trim()
-    const nextExpectedReward = expectedReward.trim()
-    const nextDesc = desc.trim()
-    const nextRemainingQuantity = Number(remainingQuantity)
 
     if (!editing && !nextId) {
       setLocalError('矿机 ID 必填。')
@@ -52,13 +67,10 @@ export function MinerModal({
       return
     }
 
+    if (!hasChanges) return
+
     if (!/^\d+$/.test(nextPrice) || !/^\d+$/.test(nextExpectedReward)) {
       setLocalError('价格和预期奖励必须是非负整数字符串。')
-      return
-    }
-
-    if (!Number.isInteger(nextRemainingQuantity) || nextRemainingQuantity < 0) {
-      setLocalError('剩余数量必须是非负整数。')
       return
     }
 
@@ -67,7 +79,6 @@ export function MinerModal({
       name: nextName,
       price: nextPrice,
       expectedReward: nextExpectedReward,
-      remainingQuantity: nextRemainingQuantity,
       ...(nextDesc ? { desc: nextDesc } : { desc: '' }),
       isPurchasable,
     }
@@ -127,6 +138,7 @@ export function MinerModal({
                 onChange={(event) => setPrice(event.target.value)}
                 placeholder="最小单位字符串"
               />
+              <span className="field-hint">对应数量：{formattedPrice}</span>
             </div>
             <div className="field compact field-editable">
               <label htmlFor="miner-reward">预期奖励</label>
@@ -137,16 +149,7 @@ export function MinerModal({
                 onChange={(event) => setExpectedReward(event.target.value)}
                 placeholder="最小单位字符串"
               />
-            </div>
-            <div className="field compact field-editable">
-              <label htmlFor="miner-quantity">剩余数量</label>
-              <input
-                id="miner-quantity"
-                inputMode="numeric"
-                value={remainingQuantity}
-                onChange={(event) => setRemainingQuantity(event.target.value)}
-                placeholder="0"
-              />
+              <span className="field-hint">对应数量：{formattedExpectedReward}</span>
             </div>
             <label className="checkbox-option miner-checkbox">
               <input
@@ -172,7 +175,7 @@ export function MinerModal({
             <button type="button" className="secondary" onClick={onClose} disabled={busy}>
               取消
             </button>
-            <button type="submit" className="primary" disabled={busy}>
+            <button type="submit" className="primary" disabled={!canSubmit}>
               {busy ? '保存中...' : '保存'}
             </button>
           </div>

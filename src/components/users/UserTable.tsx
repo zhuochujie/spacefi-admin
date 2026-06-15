@@ -65,7 +65,6 @@ export function UserTable({
                 sortOrder={sortOrder}
                 onSortChange={onSortChange}
               />
-              <th>管理员</th>
               <SortableTh
                 field="createdAt"
                 label="创建时间"
@@ -89,7 +88,6 @@ export function UserTable({
                 <td>{formatTokenAmount(user.usdtBalance)}</td>
                 <td>{user.teamCount ?? 0}</td>
                 <td>{formatTokenAmount(user.teamPerformance ?? '0')}</td>
-                <td>{user.isAdmin ? '是' : '否'}</td>
                 <td>{formatTime(user.createdAt)}</td>
                 <td>
                   <div className="table-actions">

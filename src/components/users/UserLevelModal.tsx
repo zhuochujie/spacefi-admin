@@ -32,12 +32,17 @@ export function UserLevelModal({
     return Number(value.trim())
   }
 
+  const nextManualVipLevel = parseLevel(manualVipLevel)
+  const nextNodeLevel = parseLevel(nodeLevel)
+  const isValid = nextManualVipLevel !== null && nextNodeLevel !== null
+  const hasChanges =
+    nextManualVipLevel !== user.manualVipLevel ||
+    nextNodeLevel !== user.nodeLevel
+  const canSubmit = isValid && hasChanges && !busy
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLocalError('')
-
-    const nextManualVipLevel = parseLevel(manualVipLevel)
-    const nextNodeLevel = parseLevel(nodeLevel)
 
     if (nextManualVipLevel === null || nextNodeLevel === null) {
       setLocalError('请输入非负整数等级。')
@@ -48,6 +53,8 @@ export function UserLevelModal({
       setLocalError('至少修改一个等级。')
       return
     }
+
+    if (!hasChanges) return
 
     onSubmit({
       ...(nextManualVipLevel == null ? {} : { manualVipLevel: nextManualVipLevel }),
@@ -102,7 +109,7 @@ export function UserLevelModal({
             <button type="button" className="secondary" onClick={onClose} disabled={busy}>
               取消
             </button>
-            <button type="submit" className="primary" disabled={busy}>
+            <button type="submit" className="primary" disabled={!canSubmit}>
               {busy ? '保存中...' : '保存'}
             </button>
           </div>

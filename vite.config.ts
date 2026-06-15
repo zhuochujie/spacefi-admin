@@ -11,9 +11,14 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/market-api': {
+        target: 'http://localhost:42069',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/market-api/, ''),
       },
     },
   },

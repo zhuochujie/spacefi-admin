@@ -23,9 +23,26 @@ export function formatTokenAmount(value: string, decimals = 18) {
     const formatted = formatUnits(BigInt(value), decimals)
     if (!formatted.includes('.')) return formatted
 
-    return formatted
+    const [integerPart, decimalPart = ''] = formatted.split('.')
+    const trimmedDecimal = decimalPart.slice(0, 2).replace(/0+$/, '')
+
+    if (!trimmedDecimal) return integerPart
+
+    return `${integerPart}.${trimmedDecimal}`
       .replace(/\.?0+$/, '')
       .replace(/(\.\d*?)0+$/, '$1')
+  } catch {
+    return value
+  }
+}
+
+export function formatTokenAmountFixed(value: string, fractionDigits: number, decimals = 18) {
+  try {
+    const formatted = formatUnits(BigInt(value), decimals)
+    const [integerPart, decimalPart = ''] = formatted.split('.')
+    const fixedDecimal = decimalPart.padEnd(fractionDigits, '0').slice(0, fractionDigits)
+
+    return fractionDigits > 0 ? `${integerPart}.${fixedDecimal}` : integerPart
   } catch {
     return value
   }

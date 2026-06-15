@@ -22,11 +22,35 @@ export function NoticeModal({
   const [content, setContent] = useState(notice?.content ?? '')
   const [englishTitle, setEnglishTitle] = useState(notice?.englishTitle ?? '')
   const [englishContent, setEnglishContent] = useState(notice?.englishContent ?? '')
+  const [thaiTitle, setThaiTitle] = useState(notice?.thaiTitle ?? '')
+  const [thaiContent, setThaiContent] = useState(notice?.thaiContent ?? '')
+  const [koreanTitle, setKoreanTitle] = useState(notice?.koreanTitle ?? '')
+  const [koreanContent, setKoreanContent] = useState(notice?.koreanContent ?? '')
   const [localError, setLocalError] = useState('')
 
   if (!open) return null
 
   const editing = Boolean(notice)
+  const normalizedValues = {
+    title: title.trim(),
+    content: content.trim(),
+    englishTitle: englishTitle.trim(),
+    englishContent: englishContent.trim(),
+    thaiTitle: thaiTitle.trim(),
+    thaiContent: thaiContent.trim(),
+    koreanTitle: koreanTitle.trim(),
+    koreanContent: koreanContent.trim(),
+  }
+  const titlesAreValid =
+    normalizedValues.title.length <= 200 &&
+    normalizedValues.englishTitle.length <= 200 &&
+    normalizedValues.thaiTitle.length <= 200 &&
+    normalizedValues.koreanTitle.length <= 200
+  const isValid = Boolean(normalizedValues.title && normalizedValues.content) && titlesAreValid
+  const hasChanges = !editing || Object.entries(normalizedValues).some(
+    ([key, value]) => value !== String(notice?.[key as keyof NoticeItem] ?? '').trim(),
+  )
+  const canSubmit = isValid && hasChanges && !busy
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -36,16 +60,27 @@ export function NoticeModal({
     const nextContent = content.trim()
     const nextEnglishTitle = englishTitle.trim()
     const nextEnglishContent = englishContent.trim()
+    const nextThaiTitle = thaiTitle.trim()
+    const nextThaiContent = thaiContent.trim()
+    const nextKoreanTitle = koreanTitle.trim()
+    const nextKoreanContent = koreanContent.trim()
 
     if (!nextTitle || !nextContent) {
       setLocalError('中文标题和中文内容必填。')
       return
     }
 
-    if (nextTitle.length > 200 || nextEnglishTitle.length > 200) {
+    if (
+      nextTitle.length > 200 ||
+      nextEnglishTitle.length > 200 ||
+      nextThaiTitle.length > 200 ||
+      nextKoreanTitle.length > 200
+    ) {
       setLocalError('标题不能超过 200 字符。')
       return
     }
+
+    if (!hasChanges) return
 
     const payload: NoticePayload = editing
       ? {
@@ -53,12 +88,20 @@ export function NoticeModal({
           content: nextContent,
           englishTitle: nextEnglishTitle,
           englishContent: nextEnglishContent,
+          thaiTitle: nextThaiTitle,
+          thaiContent: nextThaiContent,
+          koreanTitle: nextKoreanTitle,
+          koreanContent: nextKoreanContent,
         }
       : {
           title: nextTitle,
           content: nextContent,
           ...(nextEnglishTitle ? { englishTitle: nextEnglishTitle } : {}),
           ...(nextEnglishContent ? { englishContent: nextEnglishContent } : {}),
+          ...(nextThaiTitle ? { thaiTitle: nextThaiTitle } : {}),
+          ...(nextThaiContent ? { thaiContent: nextThaiContent } : {}),
+          ...(nextKoreanTitle ? { koreanTitle: nextKoreanTitle } : {}),
+          ...(nextKoreanContent ? { koreanContent: nextKoreanContent } : {}),
         }
 
     onSubmit(payload)
@@ -125,13 +168,53 @@ export function NoticeModal({
                 rows={8}
               />
             </div>
+            <div className="field compact field-editable">
+              <label htmlFor="notice-thai-title">泰文标题</label>
+              <input
+                id="notice-thai-title"
+                value={thaiTitle}
+                onChange={(event) => setThaiTitle(event.target.value)}
+                placeholder="请输入泰文标题"
+                maxLength={200}
+              />
+            </div>
+            <div className="field compact field-editable">
+              <label htmlFor="notice-korean-title">韩文标题</label>
+              <input
+                id="notice-korean-title"
+                value={koreanTitle}
+                onChange={(event) => setKoreanTitle(event.target.value)}
+                placeholder="请输入韩文标题"
+                maxLength={200}
+              />
+            </div>
+            <div className="field compact field-editable">
+              <label htmlFor="notice-thai-content">泰文内容</label>
+              <textarea
+                id="notice-thai-content"
+                value={thaiContent}
+                onChange={(event) => setThaiContent(event.target.value)}
+                placeholder="请输入泰文内容"
+                rows={8}
+              />
+            </div>
+            <div className="field compact field-editable">
+              <label htmlFor="notice-korean-content">韩文内容</label>
+              <textarea
+                id="notice-korean-content"
+                value={koreanContent}
+                onChange={(event) => setKoreanContent(event.target.value)}
+                placeholder="请输入韩文内容"
+                rows={8}
+              />
+            </div>
           </div>
 
           <div className="modal-actions">
             <button type="button" className="secondary" onClick={onClose} disabled={busy}>
               取消
             </button>
-            <button type="submit" className="primary" disabled={busy}>
+            <button type="submit" className="primary" disabled={!canSubmit}>
               {busy ? '保存中...' : '保存'}
             </button>
           </div>

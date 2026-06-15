@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router'
-import { WalletLoginPanel } from '../components/login/WalletLoginPanel'
+import { AdminLoginPanel } from '../components/login/AdminLoginPanel'
 
 type LoginPageProps = {
   onLogin: (token: string) => void
@@ -10,7 +10,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <main className="shell auth-shell">
-      <WalletLoginPanel
+      <AdminLoginPanel
         onLogin={(token) => {
           onLogin(token)
           navigate('/overview', { replace: true })

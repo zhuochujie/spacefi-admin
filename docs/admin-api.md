@@ -9,7 +9,7 @@
 开发环境示例：
 
 ```txt
-http://localhost:3000
+http://localhost:3001
 ```
 
 ### 统一响应
@@ -34,33 +34,48 @@ http://localhost:3000
   "code": 403,
   "message": "ADMIN_REQUIRED",
   "timestamp": 1710000000000,
-  "path": "/nzpunvnojj/profile"
+  "path": "/admin/profile"
 }
 ```
 
 ### 鉴权
 
-除获取 nonce、登录外，管理端接口都需要带 JWT：
+除登录外，管理端接口都需要带后台 JWT：
 
 ```http
 Authorization: Bearer <access_token>
 ```
 
-管理端接口还要求当前登录账户是管理员，否则返回 `ADMIN_REQUIRED`。
+普通用户钱包登录获得的 JWT 不能访问管理端接口，否则返回 `ADMIN_REQUIRED`。
+
+后台写操作成功后可发送 Telegram 通知。服务端环境变量：
+
+```text
+TELEGRAM_BOT_TOKEN=机器人 token
+TELEGRAM_CHAT_ID=目标 chat_id
+```
+
+通知包含管理员、操作、请求路径和参数。密码、token、secret、signature、privateKey
+等敏感字段会自动隐藏。任一变量未配置时不发送通知；Telegram 请求失败不会影响后台操作结果。
 
 ## 错误码
 
 | message | HTTP 状态码 | 说明 |
 | --- | --- | --- |
-| `UNAUTHORIZED` | 401 | 未登录、Token 缺失、Token 无效或账户不存在 |
-| `INVALID_SIGNATURE` | 401 | 钱包签名校验失败 |
-| `NONCE_NOT_FOUND` | 401 / 404 | Nonce 不存在或已失效 |
+| `UNAUTHORIZED` | 401 | Token 缺失或 Token 无效 |
+| `INVALID_ADMIN_CREDENTIALS` | 401 | 后台用户名或密码错误，或账号已禁用 |
+| `INVALID_CURRENT_PASSWORD` | 401 | 当前密码错误，或账号已禁用 |
 | `ADMIN_REQUIRED` | 403 | 需要管理员权限 |
+| `NEW_PASSWORD_MUST_DIFFER` | 400 | 新密码不能与当前密码相同 |
+| `ADMIN_PASSWORD_CHANGED_CONCURRENTLY` | 409 | 密码已被另一个请求修改，需要重新登录后重试 |
 | `ACCOUNT_NOT_FOUND` | 404 | 账户不存在 |
 | `INVALID_UPDATE_FIELDS` | 400 | 更新字段不能为空 |
-| `DIVIDEND_RULE_NOT_FOUND` | 404 | 分红规则不存在 |
-| `DIVIDEND_RULE_BP_EXCEEDS_LIMIT` | 400 | 同组规则 BP 总和超过 10000 |
+| `DIVIDEND_RULE_GROUP_NOT_FOUND` | 404 | 分红规则分组不存在 |
+| `DUPLICATE_DIVIDEND_RULE_LEVEL` | 400 | 同组提交了重复 level |
+| `INVALID_DIVIDEND_RULE_LEVELS` | 400 | 提交的 level 与该分组不一致 |
+| `DIVIDEND_RULE_BP_TOTAL_MUST_EQUAL_10000` | 400 | 同组规则 BP 总和必须等于 10000 |
 | `CONFIG_NOT_FOUND` | 404 | 配置不存在 |
+| `CONFIG_NOT_ADMIN_EDITABLE` | 400 | 配置不允许后台修改 |
 | `INVALID_CONFIG_FORMAT` | 400 | 配置格式错误 |
 | `CONFIG_EXCEEDS_LIMIT` | 400 | 配置超过上限 |
 | `INVALID_WITHDRAW_FEE_CONFIG` | 400 | 提现手续费配置错误 |
@@ -70,62 +85,29 @@ Authorization: Bearer <access_token>
 
 ## 登录流程
 
-管理端登录复用钱包登录接口。登录成功后，前端需要再调用 `/nzpunvnojj/profile` 判断当前账户是否具备管理员权限。
+管理端使用独立用户名和密码登录，不复用用户钱包账户。
 
-### 获取 Nonce
+后台登录用户名不存在或密码错误时，会立即禁用全部后台账号，并发送 Telegram
+安全通知。锁定后，所有后台账号此前签发的 JWT 都无法继续访问后台接口。恢复账号需要执行：
 
-授权：公开。
-
-```http
-GET /nonce/:address
+```sql
+UPDATE admin_user SET enabled = true;
 ```
-
-参数：
-
-| 参数 | 位置 | 说明 |
-| --- | --- | --- |
-| `address` | path | 钱包地址 |
-
-返回：
-
-```json
-{
-  "data": "nonce字符串"
-}
-```
-
-### 钱包签名
-
-前端使用钱包对以下消息签名：
-
-```txt
-Sign this message to login your account.
-
-Address: <address>
-Nonce: <nonce>
-```
-
-说明：
-
-| 字段 | 说明 |
-| --- | --- |
-| `address` | 当前登录钱包地址 |
-| `nonce` | 上一步接口返回的 nonce |
 
 ### 登录
 
 授权：公开。
 
 ```http
-POST /auth/login
+POST /admin-auth/login
 ```
 
 请求体：
 
 ```json
 {
-  "address": "0x...",
-  "signature": "0x..."
+  "username": "admin",
+  "password": "your-password"
 }
 ```
 
@@ -139,12 +121,44 @@ POST /auth/login
 }
 ```
 
+### 修改密码
+
+授权：需要管理员。
+
+```http
+PATCH /admin-auth/password
+Authorization: Bearer <access_token>
+```
+
+请求体：
+
+```json
+{
+  "currentPassword": "current-password",
+  "newPassword": "new-password"
+}
+```
+
+新密码长度为 8 至 128 个字符，并且不能与当前密码相同。
+
+返回：
+
+```json
+{
+  "data": {
+    "success": true
+  }
+}
+```
+
+修改成功后，已经签发的后台 JWT 在到期前仍然有效。
+
 ### 校验管理员身份
 
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/profile
+GET /admin/profile
 ```
 
 返回：
@@ -153,13 +167,12 @@ GET /nzpunvnojj/profile
 {
   "data": {
     "id": 1,
-    "address": "0x...",
-    "isAdmin": true
+    "username": "admin"
   }
 }
 ```
 
-如果当前账户不是管理员：
+如果使用普通用户 JWT 或后台账号已禁用：
 
 ```json
 {
@@ -167,9 +180,26 @@ GET /nzpunvnojj/profile
   "code": 403,
   "message": "ADMIN_REQUIRED",
   "timestamp": 1710000000000,
-  "path": "/nzpunvnojj/profile"
+  "path": "/admin/profile"
 }
 ```
+
+### 初始化后台账号
+
+生产库未开启 `TYPEORM_SYNCHRONIZE` 时，先执行：
+
+```sql
+\i sql/create_admin_user.sql
+```
+
+首次启动前配置：
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=至少8位的强密码
+```
+
+服务只会在该用户名不存在时创建账号，不会在后续启动时覆盖已有密码。密码使用 Argon2 哈希存储。首次账号创建完成后，可以从运行环境同时移除 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`。
 
 ## 统计
 
@@ -180,7 +210,7 @@ GET /nzpunvnojj/profile
 统计今日 `status = used` 的矿机购买签名 `price` 总和。今日按 `Asia/Shanghai` 自然日计算。
 
 ```http
-GET /nzpunvnojj/stats/today-miner-purchase-space
+GET /admin/stats/today-miner-purchase-space
 ```
 
 返回：
@@ -202,7 +232,7 @@ GET /nzpunvnojj/stats/today-miner-purchase-space
 有矿机的用户视为有效用户。
 
 ```http
-GET /nzpunvnojj/stats/active-users
+GET /admin/stats/active-users
 ```
 
 返回：
@@ -222,7 +252,7 @@ GET /nzpunvnojj/stats/active-users
 统计用户拥有的矿机总数。
 
 ```http
-GET /nzpunvnojj/stats/miners
+GET /admin/stats/miners
 ```
 
 返回：
@@ -235,14 +265,14 @@ GET /nzpunvnojj/stats/miners
 }
 ```
 
-### 当前挂单 SPACE 数量
+### 今晚预估矿机奖励
 
 授权：需要管理员。
 
-统计当前 `open` 且 `visible = true` 的买单和卖单剩余 SPACE 数量。
+按下一个 `Asia/Shanghai` 00:00 发奖时间，预估普通矿机和免费矿机会发放的矿机奖励。不包含团队奖励。
 
 ```http
-GET /nzpunvnojj/stats/market-open-space
+GET /admin/stats/estimated-miner-rewards
 ```
 
 返回：
@@ -250,32 +280,18 @@ GET /nzpunvnojj/stats/market-open-space
 ```json
 {
   "data": {
-    "buySpaceAmount": "1000000000000000000000",
-    "sellSpaceAmount": "2000000000000000000000"
-  }
-}
-```
-
-### 今日成交量和成交额
-
-授权：需要管理员。
-
-统计今日市场成交记录。今日按 `Asia/Shanghai` 自然日计算。
-
-```http
-GET /nzpunvnojj/stats/today-market-trades
-```
-
-返回：
-
-```json
-{
-  "data": {
-    "spaceVolume": "1000000000000000000000",
-    "tradingVolume": "500000000000000000000",
-    "tradeCount": "10",
-    "startAt": 1710000000,
-    "endAt": 1710086400
+    "targetTimestamp": 1710086400,
+    "accountMiner": {
+      "minerCount": 300,
+      "accountCount": 120,
+      "rewardTotal": "1000000000000000000000"
+    },
+    "freeMiner": {
+      "minerCount": 80,
+      "accountCount": 80,
+      "rewardTotal": "200000000000000000000"
+    },
+    "totalReward": "1200000000000000000000"
   }
 }
 ```
@@ -287,7 +303,7 @@ GET /nzpunvnojj/stats/today-market-trades
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/miners
+GET /admin/miners
 ```
 
 返回：
@@ -301,7 +317,6 @@ GET /nzpunvnojj/miners
       "price": "100000000000000000000",
       "desc": "miner.desc.SPACE_100",
       "expectedReward": "500000000000000000000",
-      "remainingQuantity": 1000,
       "isPurchasable": true
     }
   ]
@@ -313,7 +328,7 @@ GET /nzpunvnojj/miners
 授权：需要管理员。
 
 ```http
-POST /nzpunvnojj/miners
+POST /admin/miners
 ```
 
 请求体：
@@ -324,7 +339,6 @@ POST /nzpunvnojj/miners
   "name": "SPACE 100",
   "price": "100000000000000000000",
   "expectedReward": "500000000000000000000",
-  "remainingQuantity": 1000,
   "desc": "miner.desc.SPACE_100",
   "isPurchasable": true
 }
@@ -338,7 +352,6 @@ POST /nzpunvnojj/miners
 | `name` | 是 | 矿机名称 |
 | `price` | 是 | 价格，最小单位字符串 |
 | `expectedReward` | 是 | 预期奖励，最小单位字符串 |
-| `remainingQuantity` | 是 | 剩余数量 |
 | `desc` | 否 | 描述或 i18n key |
 | `isPurchasable` | 否 | 是否可购买，默认 `false` |
 
@@ -347,7 +360,7 @@ POST /nzpunvnojj/miners
 授权：需要管理员。
 
 ```http
-PATCH /nzpunvnojj/miners/:minerId
+PATCH /admin/miners/:minerId
 ```
 
 请求体：
@@ -357,7 +370,6 @@ PATCH /nzpunvnojj/miners/:minerId
   "name": "SPACE 100",
   "price": "100000000000000000000",
   "expectedReward": "500000000000000000000",
-  "remainingQuantity": 1000,
   "desc": "miner.desc.SPACE_100",
   "isPurchasable": true
 }
@@ -372,7 +384,7 @@ PATCH /nzpunvnojj/miners/:minerId
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/users?page=1&pageSize=20
+GET /admin/users?page=1&pageSize=20
 ```
 
 Query：
@@ -383,7 +395,6 @@ Query：
 | `pageSize` | 否 | 默认 `20`，最大 `100` |
 | `address` | 否 | 钱包地址，支持模糊查询 |
 | `refCode` | 否 | 推荐码，支持模糊查询 |
-| `isAdmin` | 否 | 是否管理员 |
 | `vipLevel` | 否 | VIP 等级 |
 | `nodeLevel` | 否 | 节点等级 |
 | `sortBy` | 否 | 排序字段，默认 `createdAt` |
@@ -418,7 +429,6 @@ Query：
         "balance": "0",
         "usdtBalance": "0",
         "nodeLevel": 0,
-        "isAdmin": false,
         "createdAt": 1710000000,
         "teamCount": 10,
         "teamPerformance": "3000000000000000000000"
@@ -438,7 +448,7 @@ Query：
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/notices?page=1&pageSize=20
+GET /admin/notices?page=1&pageSize=20
 ```
 
 Query：
@@ -460,6 +470,10 @@ Query：
         "content": "公告内容",
         "englishTitle": "Notice title",
         "englishContent": "Notice content",
+        "thaiTitle": "Notice title",
+        "thaiContent": "Notice content",
+        "koreanTitle": "Notice title",
+        "koreanContent": "Notice content",
         "createTime": 1710000000
       }
     ],
@@ -475,7 +489,7 @@ Query：
 授权：需要管理员。
 
 ```http
-POST /nzpunvnojj/notices
+POST /admin/notices
 ```
 
 请求体：
@@ -485,7 +499,11 @@ POST /nzpunvnojj/notices
   "title": "公告标题",
   "content": "公告内容",
   "englishTitle": "Notice title",
-  "englishContent": "Notice content"
+  "englishContent": "Notice content",
+  "thaiTitle": "Notice title",
+  "thaiContent": "Notice content",
+  "koreanTitle": "Notice title",
+  "koreanContent": "Notice content"
 }
 ```
 
@@ -497,6 +515,10 @@ POST /nzpunvnojj/notices
 | `content` | 是 | 中文内容 |
 | `englishTitle` | 否 | 英文标题，最大 `200` 字符 |
 | `englishContent` | 否 | 英文内容 |
+| `thaiTitle` | 否 | 泰文标题，最大 `200` 字符 |
+| `thaiContent` | 否 | 泰文内容 |
+| `koreanTitle` | 否 | 韩文标题，最大 `200` 字符 |
+| `koreanContent` | 否 | 韩文内容 |
 
 返回：
 
@@ -508,6 +530,10 @@ POST /nzpunvnojj/notices
     "content": "公告内容",
     "englishTitle": "Notice title",
     "englishContent": "Notice content",
+    "thaiTitle": "Notice title",
+    "thaiContent": "Notice content",
+    "koreanTitle": "Notice title",
+    "koreanContent": "Notice content",
     "createTime": 1710000000
   }
 }
@@ -518,7 +544,7 @@ POST /nzpunvnojj/notices
 授权：需要管理员。
 
 ```http
-PATCH /nzpunvnojj/notices/:noticeId
+PATCH /admin/notices/:noticeId
 ```
 
 请求体：
@@ -528,7 +554,11 @@ PATCH /nzpunvnojj/notices/:noticeId
   "title": "新的公告标题",
   "content": "新的公告内容",
   "englishTitle": "New notice title",
-  "englishContent": "New notice content"
+  "englishContent": "New notice content",
+  "thaiTitle": "New notice title",
+  "thaiContent": "New notice content",
+  "koreanTitle": "New notice title",
+  "koreanContent": "New notice content"
 }
 ```
 
@@ -540,6 +570,10 @@ PATCH /nzpunvnojj/notices/:noticeId
 | `content` | 否 | 中文内容 |
 | `englishTitle` | 否 | 英文标题，最大 `200` 字符 |
 | `englishContent` | 否 | 英文内容 |
+| `thaiTitle` | 否 | 泰文标题，最大 `200` 字符 |
+| `thaiContent` | 否 | 泰文内容 |
+| `koreanTitle` | 否 | 韩文标题，最大 `200` 字符 |
+| `koreanContent` | 否 | 韩文内容 |
 
 至少传一个字段，否则返回 `INVALID_UPDATE_FIELDS`。
 
@@ -553,6 +587,10 @@ PATCH /nzpunvnojj/notices/:noticeId
     "content": "新的公告内容",
     "englishTitle": "New notice title",
     "englishContent": "New notice content",
+    "thaiTitle": "New notice title",
+    "thaiContent": "New notice content",
+    "koreanTitle": "New notice title",
+    "koreanContent": "New notice content",
     "createTime": 1710000000
   }
 }
@@ -563,7 +601,7 @@ PATCH /nzpunvnojj/notices/:noticeId
 授权：需要管理员。
 
 ```http
-DELETE /nzpunvnojj/notices/:noticeId
+DELETE /admin/notices/:noticeId
 ```
 
 返回：
@@ -578,7 +616,7 @@ DELETE /nzpunvnojj/notices/:noticeId
 
 ## 分红规则管理
 
-分红比例使用 BP 表示，`10000` 表示 `100%`。同一个 `category + token` 下，所有规则的 `bp` 总和不能超过 `10000`。
+分红比例使用 BP 表示，`10000` 表示 `100%`。同一个 `category + token` 下，所有规则的 `bp` 总和必须等于 `10000`。
 
 规则类型：
 
@@ -599,7 +637,7 @@ Token：
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/dividend-rules
+GET /admin/dividend-rules
 ```
 
 返回：
@@ -608,13 +646,20 @@ GET /nzpunvnojj/dividend-rules
 {
   "data": [
     {
-      "id": 1,
       "category": "vip",
       "token": "SPACE",
-      "level": 1,
-      "bp": 3000,
-      "createdAt": 1710000000,
-      "updatedAt": 1710000000
+      "totalBp": 10000,
+      "rules": [
+        {
+          "id": 1,
+          "category": "vip",
+          "token": "SPACE",
+          "level": 1,
+          "bp": 3000,
+          "createdAt": 1710000000,
+          "updatedAt": 1710000000
+        }
+      ]
     }
   ]
 }
@@ -625,14 +670,35 @@ GET /nzpunvnojj/dividend-rules
 授权：需要管理员。
 
 ```http
-PATCH /nzpunvnojj/dividend-rules/:ruleId
+PATCH /admin/dividend-rules/:category/:token
 ```
 
 请求体：
 
 ```json
 {
-  "bp": 1200
+  "rules": [
+    {
+      "level": 1,
+      "bp": 3000
+    },
+    {
+      "level": 2,
+      "bp": 2500
+    },
+    {
+      "level": 3,
+      "bp": 2000
+    },
+    {
+      "level": 4,
+      "bp": 1500
+    },
+    {
+      "level": 5,
+      "bp": 1000
+    }
+  ]
 }
 ```
 
@@ -640,37 +706,48 @@ PATCH /nzpunvnojj/dividend-rules/:ruleId
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `bp` | 是 | 分红比例，范围 `0` - `10000` |
+| `rules` | 是 | 该 `category + token` 分组下全部规则 |
+| `rules[].level` | 是 | 分红等级 |
+| `rules[].bp` | 是 | 分红比例，范围 `0` - `10000` |
 
-只能修改 `bp`。修改后如果同一个 `category + token` 下规则 BP 总和超过 `10000`，返回 `DIVIDEND_RULE_BP_EXCEEDS_LIMIT`。
+必须一次提交该分组下全部 `level`，不能缺失或重复。提交后该分组所有规则 BP 总和必须等于 `10000`。
 
 返回：
 
 ```json
 {
   "data": {
-    "id": 10,
-    "category": "node",
-    "token": "USDT",
-    "level": 4,
-    "bp": 1200,
-    "createdAt": 1710000000,
-    "updatedAt": 1710000100
+    "category": "vip",
+    "token": "SPACE",
+    "totalBp": 10000,
+    "rules": [
+      {
+        "id": 1,
+        "category": "vip",
+        "token": "SPACE",
+        "level": 1,
+        "bp": 3000,
+        "createdAt": 1710000000,
+        "updatedAt": 1710000100
+      }
+    ]
   }
 }
 ```
 
 ## 配置管理
 
-配置管理只允许修改已有配置的 `value`，不支持新增配置。所有配置值都以字符串传输。
+配置管理只允许修改已有配置的 `value`，不支持新增配置。所有配置值都以字符串传输。`isAdminEditable` 表示该配置是否允许后台修改，默认 `false`。
 
 ### 查询配置列表
 
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/configs
+GET /admin/configs
 ```
+
+只返回 `isAdminEditable=true` 的配置。
 
 返回：
 
@@ -680,18 +757,39 @@ GET /nzpunvnojj/configs
     {
       "key": "TEAM_REWARD_BP",
       "value": "300",
-      "desc": "团队奖励比例，单位 BP，10000 表示 100%"
+      "desc": "团队奖励比例，单位 BP，10000 表示 100%",
+      "isAdminEditable": true
     }
   ]
 }
 ```
+
+默认可修改规则：
+
+| 配置 key | 是否后台可修改 |
+| --- | --- |
+| `VIP_FEE_BP` | 是 |
+| `NODE_FEE_BP` | 是 |
+| `INIT_CYCLE_SECONDS` | 否 |
+| `MINER_REWARD_START_AT` | 否 |
+| `MAX_CYCLE_SECONDS` | 是 |
+| `MINER_EXTENDED_PER_CYCLE_SECONDS` | 是 |
+| `CYCLE_REWARD_BP` | 是 |
+| `FEE_EXEMPT_MIN_NODE_LEVEL` | 是 |
+| `USDT_DIVIDEND_FEE_BP` | 是 |
+| `COMMISSION_HIGH_MINER_PRICE_WEI` | 否 |
+| `TEAM_REWARD_BP` | 是 |
+| `VIP_V1_MARKET_THRESHOLD_WEI` | 是 |
+| `SPACE_USDT_PRICE_WEI` | 是 |
+| `FREE_MINER_PRICE_WEI` | 否 |
+| `FREE_MINER_CYCLE_REWARD_BP` | 是 |
 
 ### 修改配置
 
 授权：需要管理员。
 
 ```http
-PATCH /nzpunvnojj/configs/:key
+PATCH /admin/configs/:key
 ```
 
 请求体：
@@ -708,13 +806,23 @@ PATCH /nzpunvnojj/configs/:key
 | --- | --- | --- |
 | `value` | 是 | 配置值字符串，目前只允许非负整数字符串 |
 
+如果配置的 `isAdminEditable` 为 `false`，接口返回 `CONFIG_NOT_ADMIN_EDITABLE`。
+
 校验规则：
 
 | 配置类型 | 规则 |
 | --- | --- |
 | BP 配置 | 最大 `10000` |
 | `VIP_FEE_BP` + `NODE_FEE_BP` | 总和不能超过 `10000` |
-| 周期、延长次数、免手续费等级配置 | 必须是大于 `0` 的安全整数 |
+| `INIT_CYCLE_SECONDS`、`MAX_CYCLE_SECONDS`、`MINER_EXTENDED_PER_CYCLE_SECONDS`、`FEE_EXEMPT_MIN_NODE_LEVEL` | 必须是大于 `0` 的安全整数 |
+| `MINER_REWARD_START_AT` | 必须是大于等于 `0` 的安全整数，秒级时间戳，`0` 表示立即开始 |
+| `SPACE_USDT_PRICE_WEI` | 必须是大于 `0` 的整数字符串，单位 USDT wei，允许超过 JS 安全整数 |
+
+修改 `CYCLE_REWARD_BP` 时，接口会在同一事务内重算所有未出局付费矿机的 `rewardPerSecond`，免费矿机不受影响。
+
+修改 `VIP_V1_MARKET_THRESHOLD_WEI` 时，接口会在同一事务内执行 `CALL recompute_vip_levels()`，重新计算所有账户的系统 VIP 等级，不影响手动 VIP 等级。
+
+修改 `FREE_MINER_CYCLE_REWARD_BP` 时，接口会在同一事务内重算所有未出局免费矿机的 `rewardPerSecond`，付费矿机不受影响。
 
 返回：
 
@@ -723,7 +831,8 @@ PATCH /nzpunvnojj/configs/:key
   "data": {
     "key": "TEAM_REWARD_BP",
     "value": "500",
-    "desc": "团队奖励比例，单位 BP，10000 表示 100%"
+    "desc": "团队奖励比例，单位 BP，10000 表示 100%",
+    "isAdminEditable": true
   }
 }
 ```
@@ -733,7 +842,7 @@ PATCH /nzpunvnojj/configs/:key
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/dividend-logs?page=1&pageSize=20
+GET /admin/dividend-logs?page=1&pageSize=20
 ```
 
 Query：
@@ -767,7 +876,6 @@ Query：
           "balance": "1000000000000000000",
           "usdtBalance": "0",
           "nodeLevel": 0,
-          "isAdmin": false,
           "createdAt": 1710000000
         }
       }
@@ -784,7 +892,7 @@ Query：
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/users/:accountId/balance-logs?page=1&pageSize=20
+GET /admin/users/:accountId/balance-logs?page=1&pageSize=20
 ```
 
 Path：
@@ -844,7 +952,7 @@ Query：
 授权：需要管理员。
 
 ```http
-PATCH /nzpunvnojj/users/:accountId/levels
+PATCH /admin/users/:accountId/levels
 ```
 
 请求体：
@@ -876,7 +984,6 @@ PATCH /nzpunvnojj/users/:accountId/levels
     "vipLevel": 0,
     "manualVipLevel": 3,
     "nodeLevel": 4,
-    "isAdmin": false,
     "balance": "0",
     "usdtBalance": "0",
     "createdAt": 1710000000
@@ -889,7 +996,7 @@ PATCH /nzpunvnojj/users/:accountId/levels
 授权：需要管理员。
 
 ```http
-GET /nzpunvnojj/users/:accountId/miners
+GET /admin/users/:accountId/miners
 ```
 
 Path：
@@ -913,7 +1020,6 @@ Path：
         "cycle": 30,
         "cycleEndAt": 1710000000,
         "lastRewardAt": 1710000000,
-        "globalExtendedTime": 0,
         "rewardPerSecond": "192901234567901",
         "createdAt": 1710000000,
         "miner": {
@@ -922,7 +1028,6 @@ Path：
           "price": "100000000000000000000",
           "desc": "miner.desc.SPACE_100",
           "expectedReward": "500000000000000000000",
-          "remainingQuantity": 1000,
           "isPurchasable": false
         }
       }

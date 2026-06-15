@@ -178,6 +178,10 @@ export function UsersPage() {
         error={modalError}
         onClose={() => setModalState(null)}
         onFiltersChange={setDraftBalanceFilters}
+        onPageChange={(page) => {
+          setDraftBalanceFilters((state) => ({ ...state, page }))
+          setBalanceFilters((state) => ({ ...state, page }))
+        }}
         onSearch={() => {
           setBalanceFilters(draftBalanceFilters)
           setBalanceSearchKey((value) => value + 1)

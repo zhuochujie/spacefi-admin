@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router'
+import { ChangePasswordModal } from '../account/ChangePasswordModal'
 import { useAdminProfileQuery } from '../../hooks/useAdminData'
-import { shortAddress } from '../../lib/format'
 
 type AdminLayoutProps = {
   token: string
@@ -10,6 +10,7 @@ type AdminLayoutProps = {
 
 export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
   const [navOpen, setNavOpen] = useState(false)
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const profileQuery = useAdminProfileQuery(token)
   const profile = profileQuery.data ?? null
 
@@ -17,7 +18,7 @@ export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
     return <main className="shell">加载中...</main>
   }
 
-  if (!profile?.isAdmin) {
+  if (!profile) {
     return (
       <main className="shell auth-shell">
         <section className="panel">
@@ -94,7 +95,17 @@ export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
           </NavLink>
         </nav>
         <div className="sidebar-footer">
-          <span>{shortAddress(profile.address)}</span>
+          <span>{profile.username}</span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              closeNav()
+              setPasswordModalOpen(true)
+            }}
+          >
+            修改密码
+          </button>
           <button type="button" className="secondary" onClick={handleLogout}>
             退出
           </button>
@@ -121,6 +132,13 @@ export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
         </header>
         <Outlet context={{ token }} />
       </section>
+
+      <ChangePasswordModal
+        key={passwordModalOpen ? 'open' : 'closed'}
+        open={passwordModalOpen}
+        token={token}
+        onClose={() => setPasswordModalOpen(false)}
+      />
     </main>
   )
 }

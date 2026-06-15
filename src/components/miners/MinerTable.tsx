@@ -26,7 +26,6 @@ export function MinerTable({ miners, busy, onEdit }: MinerTableProps) {
                 <th>名称</th>
                 <th>价格</th>
                 <th>预期奖励</th>
-                <th>剩余数量</th>
                 <th>购买状态</th>
                 <th>描述</th>
                 <th>操作</th>
@@ -39,7 +38,6 @@ export function MinerTable({ miners, busy, onEdit }: MinerTableProps) {
                   <td>{miner.name}</td>
                   <td>{formatTokenAmount(miner.price)}</td>
                   <td>{formatTokenAmount(miner.expectedReward)}</td>
-                  <td>{miner.remainingQuantity}</td>
                   <td>
                     <span className={miner.isPurchasable ? 'status success' : 'status'}>
                       {miner.isPurchasable ? '可购买' : '已下架'}

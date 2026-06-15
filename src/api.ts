@@ -1,11 +1,11 @@
 import { notifyAuthExpired } from './lib/session'
+import { formatApiMessage } from './lib/apiError'
 
-const ADMIN_API_PREFIX = '/nzpunvnojj'
+const ADMIN_API_PREFIX = '/admin'
 
 export type AdminProfile = {
   id: number
-  address: string
-  isAdmin: boolean
+  username: string
 }
 
 export type UserRecord = {
@@ -17,7 +17,6 @@ export type UserRecord = {
   balance: string
   usdtBalance: string
   nodeLevel: number
-  isAdmin: boolean
   createdAt: number
   teamCount?: number
   teamPerformance?: string
@@ -54,7 +53,6 @@ export type AdminMiner = {
   price: string
   desc?: string
   expectedReward: string
-  remainingQuantity: number
   isPurchasable: boolean
 }
 
@@ -63,7 +61,6 @@ export type CreateMinerPayload = {
   name: string
   price: string
   expectedReward: string
-  remainingQuantity: number
   desc?: string
   isPurchasable?: boolean
 }
@@ -83,8 +80,20 @@ export type DividendRule = {
   updatedAt: number
 }
 
-export type DividendRulePayload = {
-  bp?: number
+export type DividendRuleGroup = {
+  category: DividendRuleCategory
+  token: DividendRuleToken
+  totalBp: number
+  rules: DividendRule[]
+}
+
+export type DividendRuleUpdateItem = {
+  level: number
+  bp: number
+}
+
+export type DividendRuleGroupPayload = {
+  rules: DividendRuleUpdateItem[]
 }
 
 export type DividendLogItem = BalanceLogItem & {
@@ -110,6 +119,10 @@ export type NoticeItem = {
   content: string
   englishTitle?: string
   englishContent?: string
+  thaiTitle?: string
+  thaiContent?: string
+  koreanTitle?: string
+  koreanContent?: string
   createTime: number
 }
 
@@ -125,6 +138,10 @@ export type NoticePayload = {
   content?: string
   englishTitle?: string
   englishContent?: string
+  thaiTitle?: string
+  thaiContent?: string
+  koreanTitle?: string
+  koreanContent?: string
 }
 
 export type TodayMinerPurchaseSpaceStat = {
@@ -143,17 +160,31 @@ export type MarketOpenSpaceStat = {
 }
 
 export type TodayMarketTradesStat = {
-  spaceVolume: string
-  tradingVolume: string
-  tradeCount: string | number
-  startAt: number
-  endAt: number
+  tradeCount: number
+  totalSpaceAmount: string
+  totalUsdtAmount: string
+  from: number
+  to: number
+}
+
+export type EstimatedMinerRewardGroup = {
+  minerCount: number
+  accountCount: number
+  rewardTotal: string
+}
+
+export type EstimatedMinerRewardsStat = {
+  targetTimestamp: number
+  accountMiner: EstimatedMinerRewardGroup
+  freeMiner: EstimatedMinerRewardGroup
+  totalReward: string
 }
 
 export type AdminStats = {
   todayMinerPurchaseSpace: TodayMinerPurchaseSpaceStat
   activeUsers: CountStat
   miners: CountStat
+  estimatedMinerRewards: EstimatedMinerRewardsStat
   marketOpenSpace: MarketOpenSpaceStat
   todayMarketTrades: TodayMarketTradesStat
 }
@@ -178,7 +209,6 @@ export type MinerItem = {
   cycle: number
   cycleEndAt: number
   lastRewardAt: number
-  globalExtendedTime: number
   rewardPerSecond: string
   createdAt: number
   miner: {
@@ -187,7 +217,6 @@ export type MinerItem = {
     price: string
     desc: string
     expectedReward: string
-    remainingQuantity: number
     isPurchasable: boolean
   }
 }
@@ -196,7 +225,7 @@ type ApiSuccess<T> = {
   success?: boolean
   code?: number
   data?: T
-  message?: string
+  message?: string | string[]
 }
 
 type RequestOptions = {
@@ -209,6 +238,7 @@ type RequestOptions = {
 async function parseResponse<T>(response: Response): Promise<T> {
   const text = await response.text()
   let payload: ApiSuccess<T> = {}
+  const fallbackMessage = `请求失败: ${response.status}`
 
   if (text) {
     try {
@@ -218,17 +248,17 @@ async function parseResponse<T>(response: Response): Promise<T> {
         notifyAuthExpired()
       }
 
-      throw new Error(text || `请求失败: ${response.status}`)
+      throw new Error(text || fallbackMessage)
     }
   }
 
-  if (response.status === 401 || payload.code === 401) {
+  const rawMessage = Array.isArray(payload.message) ? payload.message[0] : payload.message
+  if ((response.status === 401 || payload.code === 401) && (!rawMessage || rawMessage === 'UNAUTHORIZED')) {
     notifyAuthExpired()
-    throw new Error(payload.message || `请求失败: ${response.status}`)
   }
 
   if (!response.ok || payload.success === false) {
-    throw new Error(payload.message || `请求失败: ${response.status}`)
+    throw new Error(formatApiMessage(payload.message, fallbackMessage))
   }
 
   return (payload.data ?? payload) as T
@@ -247,16 +277,25 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return parseResponse<T>(response)
 }
 
-export async function loginWithSignature(address: string, signature: string) {
-  return apiRequest<{ access_token: string }>('/auth/login', {
+export async function marketApiRequest<T>(path: string): Promise<T> {
+  const response = await fetch(`/market-api${path}`)
+  return parseResponse<T>(response)
+}
+
+export async function loginAdmin(username: string, password: string) {
+  return apiRequest<{ access_token: string }>('/admin-auth/login', {
     public: true,
     method: 'POST',
-    body: { address, signature },
+    body: { username, password },
   })
 }
 
-export async function getNonce(address: string) {
-  return apiRequest<string>(`/nonce/${address}`, { public: true })
+export async function changeAdminPassword(token: string, currentPassword: string, newPassword: string) {
+  return apiRequest<{ success: boolean }>('/admin-auth/password', {
+    token,
+    method: 'PATCH',
+    body: { currentPassword, newPassword },
+  })
 }
 
 export async function getAdminProfile(token: string) {
@@ -276,18 +315,32 @@ export async function getMinersStat(token: string) {
 }
 
 export async function getMarketOpenSpaceStat(token: string) {
-  return apiRequest<MarketOpenSpaceStat>(`${ADMIN_API_PREFIX}/stats/market-open-space`, { token })
+  void token
+  return marketApiRequest<MarketOpenSpaceStat>('/stats/market-open-space')
 }
 
 export async function getTodayMarketTradesStat(token: string) {
-  return apiRequest<TodayMarketTradesStat>(`${ADMIN_API_PREFIX}/stats/today-market-trades`, { token })
+  void token
+  return marketApiRequest<TodayMarketTradesStat>('/stats/today-market-trades')
+}
+
+export async function getEstimatedMinerRewardsStat(token: string) {
+  return apiRequest<EstimatedMinerRewardsStat>(`${ADMIN_API_PREFIX}/stats/estimated-miner-rewards`, { token })
 }
 
 export async function getAdminStats(token: string): Promise<AdminStats> {
-  const [todayMinerPurchaseSpace, activeUsers, miners, marketOpenSpace, todayMarketTrades] = await Promise.all([
+  const [
+    todayMinerPurchaseSpace,
+    activeUsers,
+    miners,
+    estimatedMinerRewards,
+    marketOpenSpace,
+    todayMarketTrades,
+  ] = await Promise.all([
     getTodayMinerPurchaseSpaceStat(token),
     getActiveUsersStat(token),
     getMinersStat(token),
+    getEstimatedMinerRewardsStat(token),
     getMarketOpenSpaceStat(token),
     getTodayMarketTradesStat(token),
   ])
@@ -296,6 +349,7 @@ export async function getAdminStats(token: string): Promise<AdminStats> {
     todayMinerPurchaseSpace,
     activeUsers,
     miners,
+    estimatedMinerRewards,
     marketOpenSpace,
     todayMarketTrades,
   }
@@ -356,15 +410,16 @@ export async function updateUserLevels(
 }
 
 export async function getDividendRules(token: string) {
-  return apiRequest<DividendRule[]>(`${ADMIN_API_PREFIX}/dividend-rules`, { token })
+  return apiRequest<DividendRuleGroup[]>(`${ADMIN_API_PREFIX}/dividend-rules`, { token })
 }
 
-export async function updateDividendRule(
+export async function updateDividendRuleGroup(
   token: string,
-  ruleId: number,
-  payload: Required<DividendRulePayload>,
+  category: DividendRuleCategory,
+  dividendToken: DividendRuleToken,
+  payload: DividendRuleGroupPayload,
 ) {
-  return apiRequest<DividendRule>(`${ADMIN_API_PREFIX}/dividend-rules/${ruleId}`, {
+  return apiRequest<DividendRuleGroup>(`${ADMIN_API_PREFIX}/dividend-rules/${category}/${dividendToken}`, {
     token,
     method: 'PATCH',
     body: payload,

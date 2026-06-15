@@ -1,6 +1,10 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
-import { updateDividendRule, type DividendRule } from '../api'
+import {
+  updateDividendRuleGroup,
+  type DividendRuleGroup,
+  type DividendRuleGroupPayload,
+} from '../api'
 import { DividendLogTable } from '../components/dividends/DividendLogTable'
 import { DividendRuleModal } from '../components/dividends/DividendRuleModal'
 import { DividendRuleTable } from '../components/dividends/DividendRuleTable'
@@ -14,23 +18,23 @@ const defaultLogFilters: DividendLogFilters = {
 
 export function DividendsPage() {
   const { token } = useAdminOutlet()
-  const [editingRule, setEditingRule] = useState<DividendRule | null>(null)
+  const [editingGroup, setEditingGroup] = useState<DividendRuleGroup | null>(null)
   const [logFilters, setLogFilters] = useState<DividendLogFilters>(defaultLogFilters)
 
   const rulesQuery = useDividendRulesQuery(token, Boolean(token))
-  const rules = rulesQuery.data ?? []
-  const vipRules = rules.filter((rule) => rule.category === 'vip')
-  const nodeRules = rules.filter((rule) => rule.category === 'node')
+  const ruleGroups = rulesQuery.data ?? []
+  const vipGroups = ruleGroups.filter((group) => group.category === 'vip')
+  const nodeGroups = ruleGroups.filter((group) => group.category === 'node')
   const logsQuery = useDividendLogsQuery(token, logFilters, Boolean(token))
   const logResponse = logsQuery.data
 
   const updateBpMutation = useMutation({
-    mutationFn: async ({ ruleId, bp }: { ruleId: number; bp: number }) => {
-      return updateDividendRule(token, ruleId, { bp })
+    mutationFn: async ({ group, payload }: { group: DividendRuleGroup; payload: DividendRuleGroupPayload }) => {
+      return updateDividendRuleGroup(token, group.category, group.token, payload)
     },
     onSuccess: async () => {
       await rulesQuery.refetch()
-      setEditingRule(null)
+      setEditingGroup(null)
     },
   })
 
@@ -43,25 +47,25 @@ export function DividendsPage() {
 
       <section className="summary-row">
         <div className="summary-card">
-          <span>规则总数</span>
-          <strong>{rules.length}</strong>
+          <span>规则分组</span>
+          <strong>{ruleGroups.length}</strong>
         </div>
         <div className="summary-card">
-          <span>VIP规则</span>
-          <strong>{vipRules.length}</strong>
+          <span>VIP分组</span>
+          <strong>{vipGroups.length}</strong>
         </div>
         <div className="summary-card">
-          <span>节点规则</span>
-          <strong>{nodeRules.length}</strong>
+          <span>节点分组</span>
+          <strong>{nodeGroups.length}</strong>
         </div>
       </section>
 
       <DividendRuleTable
-        rules={rules}
+        groups={ruleGroups}
         busy={rulesQuery.isFetching}
-        onEdit={(rule) => {
+        onEdit={(group) => {
           updateBpMutation.reset()
-          setEditingRule(rule)
+          setEditingGroup(group)
         }}
       />
 
@@ -75,18 +79,18 @@ export function DividendsPage() {
       />
 
       <DividendRuleModal
-        key={editingRule?.id ?? 'closed'}
-        open={Boolean(editingRule)}
-        rule={editingRule}
+        key={editingGroup ? `${editingGroup.category}-${editingGroup.token}` : 'closed'}
+        open={Boolean(editingGroup)}
+        group={editingGroup}
         busy={updateBpMutation.isPending}
         error={updateBpMutation.error?.message}
         onClose={() => {
-          setEditingRule(null)
+          setEditingGroup(null)
           updateBpMutation.reset()
         }}
-        onSubmit={({ bp }) => {
-          if (!editingRule) return
-          updateBpMutation.mutate({ ruleId: editingRule.id, bp })
+        onSubmit={(payload) => {
+          if (!editingGroup) return
+          updateBpMutation.mutate({ group: editingGroup, payload })
         }}
       />
     </div>

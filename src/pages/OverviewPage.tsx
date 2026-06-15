@@ -42,6 +42,15 @@ export function OverviewPage() {
           <small>用户拥有的矿机总数</small>
         </div>
         <div className="summary-card overview-card">
+          <span>今晚预估矿机奖励(静态)</span>
+          <strong>{stats ? formatTokenAmount(stats.estimatedMinerRewards.totalReward) : '-'}</strong>
+          <small>
+            {stats
+              ? `普通 ${stats.estimatedMinerRewards.accountMiner.minerCount} 台 / 免费 ${stats.estimatedMinerRewards.freeMiner.minerCount} 台，${formatTime(stats.estimatedMinerRewards.targetTimestamp)} 发放`
+              : '不包含团队奖励'}
+          </small>
+        </div>
+        <div className="summary-card overview-card">
           <span>当前挂单 SPACE 数量</span>
           <strong>
             {stats
@@ -54,12 +63,12 @@ export function OverviewPage() {
           <span>今日成交量和成交额</span>
           <strong>
             {stats
-              ? `${formatTokenAmount(stats.todayMarketTrades.spaceVolume)} / ${formatTokenAmount(stats.todayMarketTrades.tradingVolume)}`
+              ? `${formatTokenAmount(stats.todayMarketTrades.totalSpaceAmount)} / ${formatTokenAmount(stats.todayMarketTrades.totalUsdtAmount)}`
               : '-'}
           </strong>
           <small>
             {stats
-              ? `成交 ${stats.todayMarketTrades.tradeCount} 笔，${formatTime(stats.todayMarketTrades.startAt)} 至 ${formatTime(stats.todayMarketTrades.endAt)}`
+              ? `成交 ${stats.todayMarketTrades.tradeCount} 笔，${formatTime(stats.todayMarketTrades.from)} 至 ${formatTime(stats.todayMarketTrades.to)}`
               : 'SPACE 成交量 / 交易额'}
           </small>
         </div>
