@@ -13,6 +13,7 @@ export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const profileQuery = useAdminProfileQuery(token)
   const profile = profileQuery.data ?? null
+  const isAdminUser = profile?.username === 'admin'
 
   if (profileQuery.isLoading && !profile) {
     return <main className="shell">加载中...</main>
@@ -93,6 +94,22 @@ export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
           >
             配置管理
           </NavLink>
+          <NavLink
+            to="/maintenance"
+            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+            onClick={closeNav}
+          >
+            系统维护
+          </NavLink>
+          {isAdminUser ? (
+            <NavLink
+              to="/market"
+              className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+              onClick={closeNav}
+            >
+              市场管理
+            </NavLink>
+          ) : null}
         </nav>
         <div className="sidebar-footer">
           <span>{profile.username}</span>
@@ -130,7 +147,7 @@ export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
           </button>
           <strong>管理后台</strong>
         </header>
-        <Outlet context={{ token }} />
+        <Outlet context={{ token, profile }} />
       </section>
 
       <ChangePasswordModal

@@ -34,6 +34,15 @@ export type UpdateUserLevelsPayload = {
   nodeLevel?: number
 }
 
+export type AccelerateMinerPayload = {
+  amount: string
+}
+
+export type SystemRewardPayload = {
+  token: 'SPACE' | 'USDT'
+  amount: string
+}
+
 export type BalanceLogResponse = {
   list: BalanceLogItem[]
   total: number
@@ -113,6 +122,10 @@ export type AdminConfigItem = {
   desc: string
 }
 
+export type MaintenanceState = {
+  enabled: boolean
+}
+
 export type NoticeItem = {
   id: number
   title: string
@@ -157,6 +170,76 @@ export type CountStat = {
 export type MarketOpenSpaceStat = {
   buySpaceAmount: string
   sellSpaceAmount: string
+}
+
+export type MarketOrderSide = 'buy' | 'sell'
+export type MarketOrderStatus = 'open' | 'filled' | 'cancelled'
+export type MarketTradeAction = 'active_buy' | 'passive_buy' | 'active_sell' | 'passive_sell'
+
+export type MarketOrder = {
+  id: string
+  maker: string
+  side: MarketOrderSide
+  spaceAmount: string
+  remainingSpaceAmount: string
+  price: string
+  status: MarketOrderStatus
+  visible: boolean
+  transactionHash: string
+  logIndex: number
+  createdAt: number
+}
+
+export type MarketTakerTrade = {
+  id: string
+  orderId: string
+  maker: string
+  taker: string
+  side: MarketOrderSide
+  spaceAmount: string
+  price: string
+  usdtAmount: string
+  nodeFee: string
+  markerFee: string
+  transactionHash: string
+  logIndex: number
+  filledAt: number
+}
+
+export type AccountMarketTrade = MarketTakerTrade & {
+  action: MarketTradeAction
+  counterparty: string
+}
+
+export type MarketOrderResponse = {
+  items: MarketOrder[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type AccountMarketTradeResponse = {
+  items: AccountMarketTrade[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type AccountMarketTradeStats = {
+  buySpaceAmount: string
+  sellSpaceAmount: string
+}
+
+export type MarketTradeResponse = {
+  items: MarketTakerTrade[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type MarketOrderDetailResponse = {
+  order: MarketOrder
+  trades: MarketTakerTrade[]
 }
 
 export type TodayMarketTradesStat = {
@@ -324,6 +407,28 @@ export async function getTodayMarketTradesStat(token: string) {
   return marketApiRequest<TodayMarketTradesStat>('/stats/today-market-trades')
 }
 
+export async function getRecentMarketTrades(page = 1, pageSize = 10) {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  })
+
+  return marketApiRequest<MarketTradeResponse>(`/trades/recent?${params.toString()}`)
+}
+
+export async function getRecentMarketOrders(page = 1, pageSize = 10) {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  })
+
+  return marketApiRequest<MarketOrderResponse>(`/orders/recent?${params.toString()}`)
+}
+
+export async function getMarketOrderDetail(orderId: string) {
+  return marketApiRequest<MarketOrderDetailResponse>(`/orders/${encodeURIComponent(orderId)}/detail`)
+}
+
 export async function getEstimatedMinerRewardsStat(token: string) {
   return apiRequest<EstimatedMinerRewardsStat>(`${ADMIN_API_PREFIX}/stats/estimated-miner-rewards`, { token })
 }
@@ -375,6 +480,52 @@ export async function getBalanceLogs(
 
 export async function getUserMiners(token: string, accountId: number) {
   return apiRequest<MinerResponse>(`${ADMIN_API_PREFIX}/users/${accountId}/miners`, { token })
+}
+
+export async function addUserSystemReward(
+  token: string,
+  accountId: number,
+  payload: SystemRewardPayload,
+) {
+  return apiRequest<Pick<UserRecord, 'id' | 'address' | 'balance' | 'usdtBalance'>>(
+    `${ADMIN_API_PREFIX}/users/${accountId}/system-reward`,
+    {
+      token,
+      method: 'POST',
+      body: payload,
+    },
+  )
+}
+
+export async function accelerateUserMiner(
+  token: string,
+  accountId: number,
+  accountMinerId: number,
+  payload: AccelerateMinerPayload,
+) {
+  return apiRequest<MinerResponse>(
+    `${ADMIN_API_PREFIX}/users/${accountId}/miners/${accountMinerId}/accelerate`,
+    {
+      token,
+      method: 'POST',
+      body: payload,
+    },
+  )
+}
+
+export async function getUserMarketOrders(address: string, searchParams: URLSearchParams) {
+  searchParams.set('maker', address)
+  return marketApiRequest<MarketOrderResponse>(`/orders/mine?${searchParams.toString()}`)
+}
+
+export async function getUserAccountMarketTrades(address: string, searchParams: URLSearchParams) {
+  searchParams.set('account', address)
+  return marketApiRequest<AccountMarketTradeResponse>(`/trades/account?${searchParams.toString()}`)
+}
+
+export async function getUserAccountMarketTradeStats(address: string) {
+  const params = new URLSearchParams({ account: address })
+  return marketApiRequest<AccountMarketTradeStats>(`/trades/account/stats?${params.toString()}`)
 }
 
 export async function getAdminMiners(token: string) {
@@ -432,6 +583,18 @@ export async function getDividendLogs(token: string, searchParams: URLSearchPara
 
 export async function getAdminConfigs(token: string) {
   return apiRequest<AdminConfigItem[]>(`${ADMIN_API_PREFIX}/configs`, { token })
+}
+
+export async function getMaintenance(token: string) {
+  return apiRequest<MaintenanceState>(`${ADMIN_API_PREFIX}/maintenance`, { token })
+}
+
+export async function updateMaintenance(token: string, payload: MaintenanceState) {
+  return apiRequest<MaintenanceState>(`${ADMIN_API_PREFIX}/maintenance`, {
+    token,
+    method: 'PUT',
+    body: payload,
+  })
 }
 
 export async function updateAdminConfig(token: string, key: string, value: string) {

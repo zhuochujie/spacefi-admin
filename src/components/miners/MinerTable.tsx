@@ -1,5 +1,6 @@
 import type { AdminMiner } from '../../api'
-import { formatTokenAmount } from '../../lib/format'
+import { LoadingOverlay } from '../common/LoadingOverlay'
+import { formatAmount } from '../../lib/format'
 
 type MinerTableProps = {
   miners: AdminMiner[]
@@ -18,7 +19,8 @@ export function MinerTable({ miners, busy, onEdit }: MinerTableProps) {
       {miners.length === 0 && !busy ? (
         <div className="empty-state inline-empty">暂无矿机数据。</div>
       ) : (
-        <div className="table-wrap">
+        <div className={busy ? 'table-wrap loading-scope is-loading' : 'table-wrap loading-scope'}>
+          <LoadingOverlay loading={busy} />
           <table>
             <thead>
               <tr>
@@ -36,8 +38,8 @@ export function MinerTable({ miners, busy, onEdit }: MinerTableProps) {
                 <tr key={miner.id}>
                   <td>{miner.id}</td>
                   <td>{miner.name}</td>
-                  <td>{formatTokenAmount(miner.price)}</td>
-                  <td>{formatTokenAmount(miner.expectedReward)}</td>
+                  <td>{formatAmount(miner.price, { display: true })}</td>
+                  <td>{formatAmount(miner.expectedReward, { display: true })}</td>
                   <td>
                     <span className={miner.isPurchasable ? 'status success' : 'status'}>
                       {miner.isPurchasable ? '可购买' : '已下架'}

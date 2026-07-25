@@ -1,4 +1,5 @@
 import type { DividendRuleGroup } from '../../api'
+import { LoadingOverlay } from '../common/LoadingOverlay'
 import { formatDividendBp, formatDividendCategory } from '../../lib/dividends'
 import { formatTime } from '../../lib/format'
 
@@ -19,7 +20,8 @@ export function DividendRuleTable({ groups, busy, onEdit }: DividendRuleTablePro
       {groups.length === 0 && !busy ? (
         <div className="empty-state inline-empty">暂无分红规则。</div>
       ) : (
-        <div className="table-wrap">
+        <div className={busy ? 'table-wrap loading-scope is-loading' : 'table-wrap loading-scope'}>
+          <LoadingOverlay loading={busy} />
           <table>
             <thead>
               <tr>

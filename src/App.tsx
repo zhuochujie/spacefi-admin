@@ -5,6 +5,8 @@ import { AdminLayout } from './components/layout/AdminLayout'
 import { ConfigsPage } from './pages/ConfigsPage'
 import { DividendsPage } from './pages/DividendsPage'
 import { LoginPage } from './pages/LoginPage'
+import { MaintenancePage } from './pages/MaintenancePage'
+import { MarketPage } from './pages/MarketPage'
 import { MinersPage } from './pages/MinersPage'
 import { NoticesPage } from './pages/NoticesPage'
 import { OverviewPage } from './pages/OverviewPage'
@@ -82,6 +84,18 @@ function App() {
         <Route index element={<ConfigsPage />} />
       </Route>
       <Route
+        path="/maintenance"
+        element={token ? <AdminLayout token={token} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+      >
+        <Route index element={<MaintenancePage />} />
+      </Route>
+      <Route
+        path="/market"
+        element={token ? <AdminLayout token={token} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+      >
+        <Route index element={<MarketPage />} />
+      </Route>
+      <Route
         path="/admin"
         element={token ? <AdminLayout token={token} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
       >
@@ -92,6 +106,8 @@ function App() {
         <Route path="notices" element={<NoticesPage />} />
         <Route path="dividends" element={<DividendsPage />} />
         <Route path="configs" element={<ConfigsPage />} />
+        <Route path="maintenance" element={<MaintenancePage />} />
+        <Route path="market" element={<MarketPage />} />
       </Route>
       <Route
         path="*"

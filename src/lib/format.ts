@@ -18,32 +18,62 @@ export function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`
 }
 
-export function formatTokenAmount(value: string, decimals = 18) {
-  try {
-    const formatted = formatUnits(BigInt(value), decimals)
-    if (!formatted.includes('.')) return formatted
-
-    const [integerPart, decimalPart = ''] = formatted.split('.')
-    const trimmedDecimal = decimalPart.slice(0, 2).replace(/0+$/, '')
-
-    if (!trimmedDecimal) return integerPart
-
-    return `${integerPart}.${trimmedDecimal}`
-      .replace(/\.?0+$/, '')
-      .replace(/(\.\d*?)0+$/, '$1')
-  } catch {
-    return value
-  }
+type FormatAmountOptions = {
+  decimals?: number
+  fractionDigits?: number
+  fixed?: boolean
+  fallback?: string
+  minVisibleAmount?: bigint
+  minVisibleText?: string
+  display?: boolean
 }
 
-export function formatTokenAmountFixed(value: string, fractionDigits: number, decimals = 18) {
-  try {
-    const formatted = formatUnits(BigInt(value), decimals)
-    const [integerPart, decimalPart = ''] = formatted.split('.')
-    const fixedDecimal = decimalPart.padEnd(fractionDigits, '0').slice(0, fractionDigits)
+function trimTrailingZeros(value: string) {
+  return value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+}
 
-    return fractionDigits > 0 ? `${integerPart}.${fixedDecimal}` : integerPart
+function toBigint(value: bigint | string | number | null | undefined) {
+  return value === null || value === undefined
+    ? 0n
+    : typeof value === 'bigint'
+      ? value
+      : BigInt(value)
+}
+
+export function formatAmount(value: bigint | string | number | null | undefined, options: FormatAmountOptions = {}) {
+  const {
+    decimals = 18,
+    fractionDigits = 2,
+    fixed = false,
+    fallback = '0',
+    minVisibleAmount = options.display ? 10n ** 15n : undefined,
+    minVisibleText = options.display ? '<0.001' : undefined,
+  } = options
+
+  try {
+    if (decimals < 0 || !Number.isInteger(decimals)) {
+      return fallback
+    }
+
+    if (fractionDigits !== undefined && (fractionDigits < 0 || !Number.isInteger(fractionDigits))) {
+      return fallback
+    }
+
+    const bigintValue = toBigint(value)
+
+    if (minVisibleAmount !== undefined && bigintValue > 0n && bigintValue < minVisibleAmount) {
+      return minVisibleText ?? `<${formatUnits(minVisibleAmount, decimals)}`
+    }
+
+    const rawAmount = formatUnits(bigintValue, decimals)
+    const [integerPart, decimalPart = ''] = rawAmount.split('.')
+    const decimal = fractionDigits === undefined
+      ? decimalPart
+      : decimalPart.slice(0, fractionDigits).padEnd(fixed ? fractionDigits : 0, '0')
+    const formatted = decimal ? `${integerPart}.${decimal}` : integerPart
+
+    return fixed ? formatted : trimTrailingZeros(formatted)
   } catch {
-    return value
+    return fallback
   }
 }

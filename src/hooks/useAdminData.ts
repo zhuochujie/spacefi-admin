@@ -2,20 +2,33 @@ import { useQuery } from '@tanstack/react-query'
 import {
   getAdminProfile,
   getAdminStats,
+  getMarketOrderDetail,
+  getRecentMarketOrders,
+  getRecentMarketTrades,
   getAdminMiners,
   getAdminUsers,
   getAdminConfigs,
+  getMaintenance,
   getAdminNotices,
   getBalanceLogs,
   getDividendLogs,
   getDividendRules,
   getUserMiners,
+  getUserMarketOrders,
+  getUserAccountMarketTrades,
+  getUserAccountMarketTradeStats,
+  type AccountMarketTradeStats,
+  type AccountMarketTradeResponse,
   type AdminConfigItem,
   type AdminMiner,
   type AdminStats,
   type BalanceLogResponse,
   type DividendLogResponse,
   type DividendRuleGroup,
+  type MarketOrderResponse,
+  type MarketOrderDetailResponse,
+  type MarketTradeResponse,
+  type MaintenanceState,
   type MinerResponse,
   type NoticeListResponse,
   type UserListResponse,
@@ -36,6 +49,15 @@ export type BalanceFilters = {
   pageSize: number
   type: string[]
   token: string
+}
+
+export type MarketOrderFilters = {
+  page: number
+  pageSize: number
+  view: 'orders' | 'trades'
+  side: string
+  status: string
+  action: string
 }
 
 export type DividendLogFilters = {
@@ -69,6 +91,16 @@ export function buildBalanceSearchParams(filters: BalanceFilters) {
   return params
 }
 
+export function buildMarketOrderSearchParams(filters: MarketOrderFilters) {
+  const params = new URLSearchParams()
+  params.set('page', String(filters.page))
+  params.set('pageSize', String(filters.pageSize))
+  if (filters.view === 'orders' && filters.side.trim()) params.set('side', filters.side.trim())
+  if (filters.view === 'orders' && filters.status.trim()) params.set('status', filters.status.trim())
+  if (filters.view === 'trades' && filters.action.trim()) params.set('action', filters.action.trim())
+  return params
+}
+
 export function buildDividendLogSearchParams(filters: DividendLogFilters) {
   const params = new URLSearchParams()
   params.set('page', String(filters.page))
@@ -96,6 +128,32 @@ export function useAdminStatsQuery(token: string, enabled: boolean) {
     queryKey: ['admin-stats', token],
     queryFn: () => getAdminStats(token),
     enabled,
+  })
+}
+
+export function useRecentMarketTradesQuery(enabled: boolean, page = 1, pageSize = 10) {
+  return useQuery<MarketTradeResponse>({
+    queryKey: ['recent-market-trades', page, pageSize],
+    queryFn: () => getRecentMarketTrades(page, pageSize),
+    enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useRecentMarketOrdersQuery(enabled: boolean, page = 1, pageSize = 10) {
+  return useQuery<MarketOrderResponse>({
+    queryKey: ['recent-market-orders', page, pageSize],
+    queryFn: () => getRecentMarketOrders(page, pageSize),
+    enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useMarketOrderDetailQuery(orderId: string, enabled: boolean) {
+  return useQuery<MarketOrderDetailResponse>({
+    queryKey: ['market-order-detail', orderId],
+    queryFn: () => getMarketOrderDetail(orderId),
+    enabled: enabled && Boolean(orderId),
   })
 }
 
@@ -128,6 +186,41 @@ export function useUserMinersQuery(token: string, accountId: number | null, enab
     queryKey: ['admin-miners', token, accountId],
     queryFn: () => getUserMiners(token, accountId!),
     enabled: enabled && accountId != null,
+  })
+}
+
+export function useUserMarketOrdersQuery(
+  address: string | null,
+  filters: MarketOrderFilters,
+  enabled: boolean,
+) {
+  return useQuery<MarketOrderResponse>({
+    queryKey: ['admin-market-orders', address, filters],
+    queryFn: () => getUserMarketOrders(address!, buildMarketOrderSearchParams(filters)),
+    enabled: enabled && Boolean(address) && filters.view === 'orders',
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useUserAccountMarketTradesQuery(
+  address: string | null,
+  filters: MarketOrderFilters,
+  enabled: boolean,
+) {
+  return useQuery<AccountMarketTradeResponse>({
+    queryKey: ['admin-account-market-trades', address, filters],
+    queryFn: () => getUserAccountMarketTrades(address!, buildMarketOrderSearchParams(filters)),
+    enabled: enabled && Boolean(address) && filters.view === 'trades',
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useUserAccountMarketTradeStatsQuery(address: string | null, enabled: boolean) {
+  return useQuery<AccountMarketTradeStats>({
+    queryKey: ['admin-account-market-trade-stats', address],
+    queryFn: () => getUserAccountMarketTradeStats(address!),
+    enabled: enabled && Boolean(address),
+    placeholderData: (previous) => previous,
   })
 }
 
@@ -164,6 +257,14 @@ export function useAdminConfigsQuery(token: string, enabled: boolean) {
     queryFn: () => getAdminConfigs(token),
     enabled,
     placeholderData: (previous) => previous,
+  })
+}
+
+export function useMaintenanceQuery(token: string, enabled: boolean) {
+  return useQuery<MaintenanceState>({
+    queryKey: ['admin-maintenance', token],
+    queryFn: () => getMaintenance(token),
+    enabled,
   })
 }
 

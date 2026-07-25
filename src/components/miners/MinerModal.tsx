@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { AdminMiner, CreateMinerPayload, UpdateMinerPayload } from '../../api'
-import { formatTokenAmount } from '../../lib/format'
+import { formatAmount } from '../../lib/format'
 
 type MinerModalProps = {
   open: boolean
@@ -30,9 +30,9 @@ export function MinerModal({
   if (!open) return null
 
   const editing = Boolean(miner)
-  const formattedPrice = /^\d+$/.test(price.trim()) ? formatTokenAmount(price.trim()) : '-'
+  const formattedPrice = /^\d+$/.test(price.trim()) ? formatAmount(price.trim(), { display: true }) : '-'
   const formattedExpectedReward = /^\d+$/.test(expectedReward.trim())
-    ? formatTokenAmount(expectedReward.trim())
+    ? formatAmount(expectedReward.trim(), { display: true })
     : '-'
   const nextId = id.trim()
   const nextName = name.trim()

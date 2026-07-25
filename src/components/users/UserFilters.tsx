@@ -2,11 +2,12 @@ import type { UserFilters as UserFiltersState } from '../../hooks/useAdminData'
 
 type UserFiltersProps = {
   value: UserFiltersState
+  busy?: boolean
   onChange: (next: UserFiltersState) => void
   onSearch: () => void
 }
 
-export function UserFilters({ value, onChange, onSearch }: UserFiltersProps) {
+export function UserFilters({ value, busy = false, onChange, onSearch }: UserFiltersProps) {
   return (
     <form
       className="toolbar"
@@ -44,8 +45,8 @@ export function UserFilters({ value, onChange, onSearch }: UserFiltersProps) {
       </div>
       <div className="field compact toolbar-action">
         <label aria-hidden="true">&nbsp;</label>
-        <button type="submit" className="primary">
-          查询
+        <button type="submit" className="primary" disabled={busy}>
+          {busy ? '查询中...' : '查询'}
         </button>
       </div>
     </form>

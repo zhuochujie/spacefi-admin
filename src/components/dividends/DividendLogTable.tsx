@@ -1,5 +1,6 @@
 import type { DividendLogItem } from '../../api'
-import { formatTokenAmount, formatTime } from '../../lib/format'
+import { LoadingOverlay } from '../common/LoadingOverlay'
+import { formatAmount, formatTime } from '../../lib/format'
 
 type DividendLogTableProps = {
   logs: DividendLogItem[]
@@ -30,7 +31,8 @@ export function DividendLogTable({
       {logs.length === 0 && !busy ? (
         <div className="empty-state inline-empty">暂无分红记录。</div>
       ) : (
-        <div className="table-wrap">
+        <div className={busy ? 'table-wrap loading-scope is-loading' : 'table-wrap loading-scope'}>
+          <LoadingOverlay loading={busy} />
           <table>
             <thead>
               <tr>
@@ -53,9 +55,9 @@ export function DividendLogTable({
                   <td>{log.account.address}</td>
                   <td>{formatDividendType(log.type)}</td>
                   <td>{log.token}</td>
-                  <td>{formatTokenAmount(log.amount)}</td>
-                  <td>{formatTokenAmount(log.balanceBefore)}</td>
-                  <td>{formatTokenAmount(log.balanceAfter)}</td>
+                  <td>{formatAmount(log.amount, { display: true })}</td>
+                  <td>{formatAmount(log.balanceBefore, { display: true })}</td>
+                  <td>{formatAmount(log.balanceAfter, { display: true })}</td>
                   <td>{log.account.vipLevel}</td>
                   <td>{log.account.nodeLevel}</td>
                   <td>{formatTime(log.createdAt)}</td>
@@ -68,7 +70,7 @@ export function DividendLogTable({
 
       <div className="pager pager-split">
         <div className="pager-left">
-          <button type="button" className="secondary" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}>
+          <button type="button" className="secondary" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={busy || page <= 1}>
             上一页
           </button>
         </div>
@@ -82,7 +84,7 @@ export function DividendLogTable({
             type="button"
             className="secondary"
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-            disabled={page >= totalPages}
+            disabled={busy || page >= totalPages}
           >
             下一页
           </button>

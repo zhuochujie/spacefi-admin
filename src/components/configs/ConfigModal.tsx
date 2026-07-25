@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { AdminConfigItem } from '../../api'
 import { formatDividendBp } from '../../lib/dividends'
-import { formatTokenAmount } from '../../lib/format'
+import { formatAmount } from '../../lib/format'
 
 type ConfigModalProps = {
   open: boolean
@@ -32,19 +32,26 @@ export function ConfigModal({
   const isWeiConfig = config.key.endsWith('WEI')
   const isBpConfig = config.key.endsWith('BP')
   const isSecondsConfig = config.key.endsWith('SECONDS')
+  const isBooleanConfig = config.key === 'FREE_MINER_CAN_INVITE'
   const isNumericValue = /^\d+$/.test(value.trim())
-  const readableValue = isWeiConfig && isNumericValue ? formatTokenAmount(value.trim()) : '-'
+  const readableValue = isWeiConfig && isNumericValue ? formatAmount(value.trim(), { display: true }) : '-'
   const readableBp = isBpConfig && isNumericValue ? formatDividendBp(Number(value.trim())) : '-'
   const readableDays = isSecondsConfig && isNumericValue ? formatSecondsAsDays(value.trim()) : '-'
   const nextValue = value.trim()
   const hasChanges = nextValue !== config.value.trim()
-  const canSubmit = isNumericValue && hasChanges && !busy
+  const isValidValue = isBooleanConfig ? ['0', '1'].includes(nextValue) : isNumericValue
+  const canSubmit = isValidValue && hasChanges && !busy
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLocalError('')
 
-    if (!/^\d+$/.test(nextValue)) {
+    if (!isValidValue) {
+      if (isBooleanConfig) {
+        setLocalError('该配置只能填写 1 或 0。')
+        return
+      }
+
       setLocalError('配置值必须是非负整数字符串。')
       return
     }
@@ -91,6 +98,7 @@ export function ConfigModal({
               {isWeiConfig ? <span className="field-hint">对应数量：{readableValue}</span> : null}
               {isBpConfig ? <span className="field-hint">对应比例：{readableBp}</span> : null}
               {isSecondsConfig ? <span className="field-hint">对应天数：{readableDays}</span> : null}
+              {isBooleanConfig ? <span className="field-hint">1 表示开启，0 表示关闭。</span> : null}
             </div>
             <div className="field compact config-desc-field">
               <label>说明</label>

@@ -1,6 +1,7 @@
 import type { AdminConfigItem } from '../../api'
+import { LoadingOverlay } from '../common/LoadingOverlay'
 import { formatDividendBp } from '../../lib/dividends'
-import { formatTokenAmount } from '../../lib/format'
+import { formatAmount } from '../../lib/format'
 
 type ConfigTableProps = {
   configs: AdminConfigItem[]
@@ -15,6 +16,10 @@ export function ConfigTable({ configs, busy, onEdit }: ConfigTableProps) {
   }
 
   function formatConfigValue(config: AdminConfigItem) {
+    if (config.key === 'FREE_MINER_CAN_INVITE') {
+      return config.value === '1' ? '开启 (1)' : '关闭 (0)'
+    }
+
     if (config.key.endsWith('BP') && /^\d+$/.test(config.value)) {
       return `${formatDividendBp(Number(config.value))} (${config.value})`
     }
@@ -25,7 +30,7 @@ export function ConfigTable({ configs, busy, onEdit }: ConfigTableProps) {
 
     if (!config.key.endsWith('WEI')) return config.value
 
-    const readableValue = formatTokenAmount(config.value)
+    const readableValue = formatAmount(config.value, { display: true })
     return `${readableValue} (${config.value})`
   }
 
@@ -39,7 +44,8 @@ export function ConfigTable({ configs, busy, onEdit }: ConfigTableProps) {
       {configs.length === 0 && !busy ? (
         <div className="empty-state inline-empty">暂无配置数据。</div>
       ) : (
-        <div className="table-wrap">
+        <div className={busy ? 'table-wrap loading-scope is-loading' : 'table-wrap loading-scope'}>
+          <LoadingOverlay loading={busy} />
           <table>
             <thead>
               <tr>
