@@ -11,12 +11,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://38.60.89.185/api',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/market-api': {
-        target: 'http://localhost:42069',
+        target: 'http://38.60.89.185/api',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/market-api/, ''),
       },

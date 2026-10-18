@@ -46,6 +46,15 @@ export function OverviewPage() {
           <small>用户拥有的矿机总数</small>
         </div>
         <div className="summary-card overview-card">
+          <span>平台用户总余额</span>
+          <strong>
+            {stats
+              ? `${formatAmount(stats.userBalanceTotals.spaceBalance, { display: true })} / ${formatAmount(stats.userBalanceTotals.usdtBalance, { display: true, fractionDigits: 3 })}`
+              : '-'}
+          </strong>
+          <small>SPACE / USDT</small>
+        </div>
+        <div className="summary-card overview-card">
           <span>今晚预估矿机奖励(静态)</span>
           <strong>{stats ? formatAmount(stats.estimatedMinerRewards.totalReward, { display: true }) : '-'}</strong>
           <small>

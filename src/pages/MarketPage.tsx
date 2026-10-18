@@ -1,30 +1,154 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import copy from 'copy-to-clipboard'
-import type { MarketOrder, MarketOrderStatus, MarketTakerTrade } from '../api'
+import { formatUnits, parseUnits } from 'viem'
+import {
+  getAdminUsers,
+  getTeamMarketTradeStats,
+  getUserTeamAddresses,
+  updateMarketTradeVolumeAdjustment,
+  type MarketOrder,
+  type MarketOrderSide,
+  type MarketOrderStatus,
+  type MarketTakerTrade,
+  type UserRecord,
+} from '../api'
 import { LoadingOverlay } from '../components/common/LoadingOverlay'
+import { Pagination } from '../components/common/Pagination'
+import { UserDataModal } from '../components/users/UserDataModal'
+import { UserTeamModal } from '../components/users/UserTeamModal'
 import {
   useMarketOrderDetailQuery,
+  useMarketTradeVolumeAdjustmentQuery,
+  useOpenMarketOrdersQuery,
   useRecentMarketOrdersQuery,
   useRecentMarketTradesQuery,
+  useUserAccountMarketTradesQuery,
+  useUserAccountMarketTradeStatsQuery,
+  useUserBalanceLogsQuery,
+  useUserMarketOrdersQuery,
+  useUserMinersQuery,
+  useUserTeamBranchesQuery,
+  useUserTeamMembersQuery,
+  useUserTeamMinerPurchaseStatsQuery,
+  useUserTeamOverviewQuery,
+  type BalanceFilters,
+  type MarketOrderFilters,
+  type MarketTradeStatsRange,
+  type TeamBranchFilters,
+  type TeamMemberFilters,
+  type TeamMinerPurchaseStatsRange,
 } from '../hooks/useAdminData'
 import { useAdminOutlet } from '../hooks/useAdminOutlet'
 import { formatAmount, formatTime, shortAddress } from '../lib/format'
 
 const PAGE_SIZE = 10
+const defaultBalanceFilters: BalanceFilters = {
+  page: 1,
+  pageSize: 10,
+  type: [],
+  token: '',
+}
+
+const defaultMarketOrderFilters: MarketOrderFilters = {
+  page: 1,
+  pageSize: 10,
+  view: 'orders',
+  side: '',
+  status: '',
+  action: '',
+}
+
+const getDefaultMarketTradeStatsRange = (): MarketTradeStatsRange => ({
+  from: 0,
+  to: Math.floor(Date.now() / 1000),
+})
+
+const defaultTeamBranchFilters: TeamBranchFilters = {
+  page: 1,
+  pageSize: 10,
+}
+
+const defaultTeamMemberFilters: TeamMemberFilters = {
+  page: 1,
+  pageSize: 10,
+  level: '',
+  address: '',
+}
+
+const getDefaultTeamMinerPurchaseStatsRange = (): TeamMinerPurchaseStatsRange => ({
+  from: 0,
+  to: Math.floor(Date.now() / 1000),
+})
+
+type UserModalMode = 'balance-logs' | 'miners' | 'market-orders'
+type UserAddressAction = UserModalMode | 'team'
 
 export function MarketPage() {
-  const { profile } = useAdminOutlet()
+  const { token, profile } = useAdminOutlet()
   const isAdminUser = profile.username === 'admin'
   const [tradePage, setTradePage] = useState(1)
   const [orderPage, setOrderPage] = useState(1)
+  const [openOrderPage, setOpenOrderPage] = useState(1)
+  const [openOrderSide, setOpenOrderSide] = useState<MarketOrderSide>('buy')
   const [orderIdInput, setOrderIdInput] = useState('')
   const [orderId, setOrderId] = useState('')
   const [toastMessage, setToastMessage] = useState('')
+  const [volumeAdjustmentInput, setVolumeAdjustmentInput] = useState('')
+  const [volumeAdjustmentFormError, setVolumeAdjustmentFormError] = useState('')
+  const [activeAddressMenu, setActiveAddressMenu] = useState<string | null>(null)
+  const [modalState, setModalState] = useState<{ mode: UserModalMode; user: UserRecord } | null>(null)
+  const [teamUser, setTeamUser] = useState<UserRecord | null>(null)
+  const [draftBalanceFilters, setDraftBalanceFilters] = useState<BalanceFilters>(defaultBalanceFilters)
+  const [balanceFilters, setBalanceFilters] = useState<BalanceFilters>(defaultBalanceFilters)
+  const [marketOrderFilters, setMarketOrderFilters] = useState<MarketOrderFilters>(defaultMarketOrderFilters)
+  const [marketTradeStatsRange, setMarketTradeStatsRange] = useState<MarketTradeStatsRange>(getDefaultMarketTradeStatsRange)
+  const [balanceSearchKey, setBalanceSearchKey] = useState(0)
+  const [teamBranchFilters, setTeamBranchFilters] = useState<TeamBranchFilters>(defaultTeamBranchFilters)
+  const [teamMemberFilters, setTeamMemberFilters] = useState<TeamMemberFilters>(defaultTeamMemberFilters)
+  const [teamMinerPurchaseStatsRange, setTeamMinerPurchaseStatsRange] = useState<TeamMinerPurchaseStatsRange>(
+    getDefaultTeamMinerPurchaseStatsRange,
+  )
 
+  const openOrdersQuery = useOpenMarketOrdersQuery(isAdminUser, openOrderPage, PAGE_SIZE, openOrderSide)
   const recentTradesQuery = useRecentMarketTradesQuery(isAdminUser, tradePage, PAGE_SIZE)
   const recentOrdersQuery = useRecentMarketOrdersQuery(isAdminUser, orderPage, PAGE_SIZE)
   const orderDetailQuery = useMarketOrderDetailQuery(orderId, isAdminUser && Boolean(orderId))
-  const refreshing = recentTradesQuery.isFetching || recentOrdersQuery.isFetching || orderDetailQuery.isFetching
+  const volumeAdjustmentQuery = useMarketTradeVolumeAdjustmentQuery(token, isAdminUser)
+  const activeUserId = modalState?.user.id ?? null
+  const balanceLogsQuery = useUserBalanceLogsQuery(
+    token,
+    activeUserId,
+    balanceFilters,
+    modalState?.mode === 'balance-logs',
+    balanceSearchKey,
+  )
+  const minersQuery = useUserMinersQuery(token, activeUserId, modalState?.mode === 'miners')
+  const marketOrdersQuery = useUserMarketOrdersQuery(
+    modalState?.user.address ?? null,
+    marketOrderFilters,
+    modalState?.mode === 'market-orders',
+  )
+  const accountMarketTradesQuery = useUserAccountMarketTradesQuery(
+    modalState?.user.address ?? null,
+    marketOrderFilters,
+    modalState?.mode === 'market-orders',
+  )
+  const accountMarketTradeStatsQuery = useUserAccountMarketTradeStatsQuery(
+    modalState?.user.address ?? null,
+    marketTradeStatsRange,
+    modalState?.mode === 'market-orders',
+  )
+  const teamOverviewQuery = useUserTeamOverviewQuery(token, teamUser?.id ?? null, Boolean(teamUser))
+  const teamBranchesQuery = useUserTeamBranchesQuery(token, teamUser?.id ?? null, teamBranchFilters, Boolean(teamUser))
+  const teamMembersQuery = useUserTeamMembersQuery(token, teamUser?.id ?? null, teamMemberFilters, Boolean(teamUser))
+  const teamMinerPurchaseStatsQuery = useUserTeamMinerPurchaseStatsQuery(
+    token,
+    teamUser?.id ?? null,
+    teamMinerPurchaseStatsRange,
+    Boolean(teamUser),
+  )
+  const refreshing = openOrdersQuery.isFetching || recentTradesQuery.isFetching || recentOrdersQuery.isFetching || orderDetailQuery.isFetching
 
   useEffect(() => {
     if (!toastMessage) return
@@ -33,9 +157,28 @@ export function MarketPage() {
     return () => window.clearTimeout(timer)
   }, [toastMessage])
 
+  useEffect(() => {
+    if (!volumeAdjustmentQuery.data) return
+    setVolumeAdjustmentInput(formatUnits(BigInt(volumeAdjustmentQuery.data.amount), 18))
+  }, [volumeAdjustmentQuery.data])
+
+  const volumeAdjustmentMutation = useMutation({
+    mutationFn: (amount: string) => updateMarketTradeVolumeAdjustment(token, amount),
+    onSuccess: async (result) => {
+      setVolumeAdjustmentInput(formatUnits(BigInt(result.amount), 18))
+      setVolumeAdjustmentFormError('')
+      setToastMessage('交易量调整值已更新')
+      await volumeAdjustmentQuery.refetch()
+    },
+  })
+
   const tradeTotalPages = useMemo(
     () => getTotalPages(recentTradesQuery.data?.total ?? 0, PAGE_SIZE),
     [recentTradesQuery.data?.total],
+  )
+  const openOrderTotalPages = useMemo(
+    () => getTotalPages(openOrdersQuery.data?.total ?? 0, PAGE_SIZE),
+    [openOrdersQuery.data?.total],
   )
   const orderTotalPages = useMemo(
     () => getTotalPages(recentOrdersQuery.data?.total ?? 0, PAGE_SIZE),
@@ -44,8 +187,10 @@ export function MarketPage() {
 
   const refresh = async () => {
     const refetches: Promise<unknown>[] = [
+      openOrdersQuery.refetch(),
       recentTradesQuery.refetch(),
       recentOrdersQuery.refetch(),
+      volumeAdjustmentQuery.refetch(),
     ]
 
     if (orderId) {
@@ -66,6 +211,92 @@ export function MarketPage() {
 
     setOrderId(nextOrderId)
   }
+
+  const updateVolumeAdjustment = (value: string) => {
+    try {
+      const amount = parseUnits(value.trim(), 18)
+      setVolumeAdjustmentFormError('')
+      volumeAdjustmentMutation.mutate(amount.toString())
+    } catch {
+      setVolumeAdjustmentFormError('请输入有效数量，最多支持 18 位小数')
+    }
+  }
+
+  const findUserByAddressMutation = useMutation({
+    mutationFn: async ({ address, action }: { address: string; action: UserAddressAction }) => {
+      const params = new URLSearchParams({
+        page: '1',
+        pageSize: '10',
+        address,
+      })
+      const result = await getAdminUsers(token, params)
+      const user = result.list.find((item) => item.address.toLowerCase() === address.toLowerCase())
+
+      if (!user) {
+        throw new Error('用户不存在')
+      }
+
+      return { user, action }
+    },
+    onSuccess: ({ user, action }) => {
+      setActiveAddressMenu(null)
+
+      if (action === 'team') {
+        setModalState(null)
+        setTeamUser(user)
+        setTeamBranchFilters(defaultTeamBranchFilters)
+        setTeamMemberFilters(defaultTeamMemberFilters)
+        setTeamMinerPurchaseStatsRange(getDefaultTeamMinerPurchaseStatsRange())
+        teamMarketStatsMutation.reset()
+        return
+      }
+
+      setTeamUser(null)
+      setModalState({ mode: action, user })
+
+      if (action === 'balance-logs') {
+        setDraftBalanceFilters(defaultBalanceFilters)
+        setBalanceFilters(defaultBalanceFilters)
+        setBalanceSearchKey((value) => value + 1)
+      }
+
+      if (action === 'market-orders') {
+        setMarketOrderFilters(defaultMarketOrderFilters)
+        setMarketTradeStatsRange(getDefaultMarketTradeStatsRange())
+      }
+    },
+    onError: (error) => {
+      setToastMessage(error instanceof Error ? error.message : '查询用户失败')
+    },
+  })
+
+  const teamMarketStatsMutation = useMutation({
+    mutationFn: async ({
+      accountId,
+      from,
+      to,
+    }: {
+      accountId: number
+      from: number
+      to: number
+    }) => {
+      const { addresses } = await getUserTeamAddresses(token, accountId)
+      return getTeamMarketTradeStats({ accounts: addresses, from, to })
+    },
+  })
+
+  const openUserAction = (address: string, action: UserAddressAction) => {
+    findUserByAddressMutation.mutate({ address, action })
+  }
+
+  const modalError =
+    modalState?.mode === 'miners'
+      ? minersQuery.error?.message
+      : modalState?.mode === 'market-orders'
+        ? marketOrderFilters.view === 'orders'
+          ? marketOrdersQuery.error?.message
+          : accountMarketTradesQuery.error?.message
+        : balanceLogsQuery.error?.message
 
   if (!isAdminUser) {
     return (
@@ -91,7 +322,63 @@ export function MarketPage() {
 
       {recentTradesQuery.error ? <div className="alert error">{recentTradesQuery.error.message}</div> : null}
       {recentOrdersQuery.error ? <div className="alert error">{recentOrdersQuery.error.message}</div> : null}
+      {openOrdersQuery.error ? <div className="alert error">{openOrdersQuery.error.message}</div> : null}
       {orderDetailQuery.error ? <div className="alert error">{orderDetailQuery.error.message}</div> : null}
+      {volumeAdjustmentQuery.error ? <div className="alert error">{volumeAdjustmentQuery.error.message}</div> : null}
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <p className="eyebrow">Market Volume</p>
+            <h2>24 小时交易量调整</h2>
+          </div>
+          <span>
+            当前调整：{volumeAdjustmentQuery.data
+              ? `${formatAmount(volumeAdjustmentQuery.data.amount, { display: true })} SPACE`
+              : '加载中'}
+          </span>
+        </div>
+        <div className="detail-filters">
+          <div className="field compact">
+            <label htmlFor="market-volume-adjustment">调整数量（SPACE）</label>
+            <input
+              id="market-volume-adjustment"
+              value={volumeAdjustmentInput}
+              disabled={volumeAdjustmentMutation.isPending}
+              placeholder="支持正数或负数"
+              onChange={(event) => setVolumeAdjustmentInput(event.target.value)}
+            />
+          </div>
+          <div className="field compact toolbar-action">
+            <label aria-hidden="true">&nbsp;</label>
+            <button
+              type="button"
+              className="primary"
+              disabled={volumeAdjustmentMutation.isPending}
+              onClick={() => updateVolumeAdjustment(volumeAdjustmentInput)}
+            >
+              {volumeAdjustmentMutation.isPending ? '保存中...' : '保存调整值'}
+            </button>
+          </div>
+          <div className="field compact toolbar-action">
+            <label aria-hidden="true">&nbsp;</label>
+            <button
+              type="button"
+              className="secondary"
+              disabled={volumeAdjustmentMutation.isPending}
+              onClick={() => updateVolumeAdjustment('0')}
+            >
+              归零
+            </button>
+          </div>
+        </div>
+        {(volumeAdjustmentFormError || volumeAdjustmentMutation.error) && (
+          <p className="status error">
+            {volumeAdjustmentFormError || volumeAdjustmentMutation.error?.message}
+          </p>
+        )}
+        <p className="status">该值会加到 indexer 返回的真实 24 小时 SPACE 成交量上，并保存在 Redis。</p>
+      </section>
 
       <section className="panel">
         <div className="panel-head">
@@ -124,8 +411,62 @@ export function MarketPage() {
             searched={Boolean(orderId)}
             busy={orderDetailQuery.isFetching}
             onToast={setToastMessage}
+            activeAddressMenu={activeAddressMenu}
+            onToggleAddressMenu={setActiveAddressMenu}
+            onOpenUserAction={openUserAction}
           />
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <p className="eyebrow">Open Orders</p>
+            <h2>当前市场挂单</h2>
+          </div>
+          <span>{openOrdersQuery.data ? `共 ${openOrdersQuery.data.total} 笔` : '买单/卖单分别查看'}</span>
+        </div>
+        <div className="market-side-tabs">
+          <button
+            type="button"
+            className={openOrderSide === 'buy' ? 'active' : ''}
+            disabled={openOrdersQuery.isFetching}
+            onClick={() => {
+              setOpenOrderSide('buy')
+              setOpenOrderPage(1)
+            }}
+          >
+            买单
+          </button>
+          <button
+            type="button"
+            className={openOrderSide === 'sell' ? 'active' : ''}
+            disabled={openOrdersQuery.isFetching}
+            onClick={() => {
+              setOpenOrderSide('sell')
+              setOpenOrderPage(1)
+            }}
+          >
+            卖单
+          </button>
+        </div>
+        <div className={openOrdersQuery.isFetching ? 'loading-scope is-loading' : 'loading-scope'}>
+          <LoadingOverlay loading={openOrdersQuery.isFetching} />
+          <MarketOrderTable
+            orders={openOrdersQuery.data?.items ?? []}
+            busy={openOrdersQuery.isFetching}
+            onToast={setToastMessage}
+            activeAddressMenu={activeAddressMenu}
+            onToggleAddressMenu={setActiveAddressMenu}
+            onOpenUserAction={openUserAction}
+          />
+        </div>
+        <Pagination
+          page={openOrderPage}
+          totalPages={openOrderTotalPages}
+          busy={openOrdersQuery.isFetching}
+          onPageChange={setOpenOrderPage}
+        />
       </section>
 
       <section className="panel">
@@ -142,14 +483,16 @@ export function MarketPage() {
             trades={recentTradesQuery.data?.items ?? []}
             busy={recentTradesQuery.isFetching}
             onToast={setToastMessage}
+            activeAddressMenu={activeAddressMenu}
+            onToggleAddressMenu={setActiveAddressMenu}
+            onOpenUserAction={openUserAction}
           />
         </div>
         <Pagination
           page={tradePage}
           totalPages={tradeTotalPages}
-          onPrev={() => setTradePage((value) => Math.max(1, value - 1))}
-          onNext={() => setTradePage((value) => Math.min(tradeTotalPages, value + 1))}
-          disabled={recentTradesQuery.isFetching}
+          busy={recentTradesQuery.isFetching}
+          onPageChange={setTradePage}
         />
       </section>
 
@@ -167,16 +510,88 @@ export function MarketPage() {
             orders={recentOrdersQuery.data?.items ?? []}
             busy={recentOrdersQuery.isFetching}
             onToast={setToastMessage}
+            activeAddressMenu={activeAddressMenu}
+            onToggleAddressMenu={setActiveAddressMenu}
+            onOpenUserAction={openUserAction}
           />
         </div>
         <Pagination
           page={orderPage}
           totalPages={orderTotalPages}
-          onPrev={() => setOrderPage((value) => Math.max(1, value - 1))}
-          onNext={() => setOrderPage((value) => Math.min(orderTotalPages, value + 1))}
-          disabled={recentOrdersQuery.isFetching}
+          busy={recentOrdersQuery.isFetching}
+          onPageChange={setOrderPage}
         />
       </section>
+
+      <UserTeamModal
+        open={Boolean(teamUser)}
+        user={teamUser}
+        overview={teamOverviewQuery.data ?? null}
+        branches={teamBranchesQuery.data?.list ?? []}
+        members={teamMembersQuery.data?.list ?? []}
+        branchFilters={teamBranchFilters}
+        memberFilters={teamMemberFilters}
+        totalBranches={teamBranchesQuery.data?.total ?? 0}
+        totalMembers={teamMembersQuery.data?.total ?? 0}
+        marketStats={teamMarketStatsMutation.data ?? null}
+        minerPurchaseStats={teamMinerPurchaseStatsQuery.data ?? null}
+        minerPurchaseStatsRange={teamMinerPurchaseStatsRange}
+        busy={teamOverviewQuery.isFetching || teamBranchesQuery.isFetching || teamMembersQuery.isFetching || teamMinerPurchaseStatsQuery.isFetching}
+        marketStatsBusy={teamMarketStatsMutation.isPending}
+        minerPurchaseStatsBusy={teamMinerPurchaseStatsQuery.isFetching}
+        error={teamOverviewQuery.error?.message || teamBranchesQuery.error?.message || teamMembersQuery.error?.message}
+        marketStatsError={teamMarketStatsMutation.error?.message}
+        minerPurchaseStatsError={teamMinerPurchaseStatsQuery.error?.message}
+        onClose={() => {
+          setTeamUser(null)
+          teamMarketStatsMutation.reset()
+        }}
+        onQueryMarketStats={({ from, to }) => {
+          if (!teamUser) return
+          teamMarketStatsMutation.mutate({ accountId: teamUser.id, from, to })
+        }}
+        onQueryMinerPurchaseStats={setTeamMinerPurchaseStatsRange}
+        onBranchPageChange={(page) => setTeamBranchFilters((state) => ({ ...state, page }))}
+        onMemberFiltersChange={setTeamMemberFilters}
+        onMemberPageChange={(page) => setTeamMemberFilters((state) => ({ ...state, page }))}
+      />
+
+      <UserDataModal
+        open={Boolean(modalState)}
+        title={modalState?.mode === 'miners' ? '用户矿机' : modalState?.mode === 'market-orders' ? '市场订单' : '资金记录'}
+        user={modalState?.user ?? null}
+        mode={modalState?.mode ?? 'balance-logs'}
+        logs={balanceLogsQuery.data?.list ?? []}
+        miners={minersQuery.data?.list ?? []}
+        marketOrders={marketOrdersQuery.data?.items ?? []}
+        marketTrades={accountMarketTradesQuery.data?.items ?? []}
+        marketTradeStats={accountMarketTradeStatsQuery.data ?? null}
+        marketTradeStatsRange={marketTradeStatsRange}
+        marketTradeStatsBusy={accountMarketTradeStatsQuery.isFetching}
+        marketTradeStatsError={accountMarketTradeStatsQuery.error?.message}
+        filters={draftBalanceFilters}
+        marketOrderFilters={marketOrderFilters}
+        totalLogs={balanceLogsQuery.data?.total ?? 0}
+        totalMarketOrders={marketOrderFilters.view === 'orders' ? marketOrdersQuery.data?.total ?? 0 : accountMarketTradesQuery.data?.total ?? 0}
+        searched={balanceSearchKey > 0}
+        busy={balanceLogsQuery.isFetching || minersQuery.isFetching || marketOrdersQuery.isFetching || accountMarketTradesQuery.isFetching || accountMarketTradeStatsQuery.isFetching || findUserByAddressMutation.isPending}
+        error={modalError}
+        showAccelerate={false}
+        onClose={() => setModalState(null)}
+        onFiltersChange={setDraftBalanceFilters}
+        onMarketOrderFiltersChange={setMarketOrderFilters}
+        onMarketTradeStatsSearch={setMarketTradeStatsRange}
+        onPageChange={(page) => {
+          setDraftBalanceFilters((state) => ({ ...state, page }))
+          setBalanceFilters((state) => ({ ...state, page }))
+        }}
+        onMarketOrderPageChange={(page) => setMarketOrderFilters((state) => ({ ...state, page }))}
+        onSearch={() => {
+          setBalanceFilters(draftBalanceFilters)
+          setBalanceSearchKey((value) => value + 1)
+        }}
+        onAccelerateMiner={async () => undefined}
+      />
 
       {toastMessage && <div className="copy-toast" role="status">{toastMessage}</div>}
     </div>
@@ -189,12 +604,18 @@ function OrderDetailPanel({
   searched,
   busy,
   onToast,
+  activeAddressMenu,
+  onToggleAddressMenu,
+  onOpenUserAction,
 }: {
   order: MarketOrder | null
   trades: MarketTakerTrade[]
   searched: boolean
   busy: boolean
   onToast: (message: string) => void
+  activeAddressMenu: string | null
+  onToggleAddressMenu: (address: string | null) => void
+  onOpenUserAction: (address: string, action: UserAddressAction) => void
 }) {
   if (!searched) {
     return <div className="empty-state inline-empty">输入订单ID后查看挂单信息和成交记录。</div>
@@ -217,7 +638,16 @@ function OrderDetailPanel({
         </div>
         <div>
           <label>挂单方</label>
-          <strong><CopyValueButton value={order.maker} label={shortAddress(order.maker)} onToast={onToast} /></strong>
+          <strong>
+            <UserAddressMenuButton
+              address={order.maker}
+              menuKey={`order-detail-${order.id}-maker`}
+              activeAddressMenu={activeAddressMenu}
+              onToggleAddressMenu={onToggleAddressMenu}
+              onOpenUserAction={onOpenUserAction}
+              onToast={onToast}
+            />
+          </strong>
         </div>
         <div>
           <label>方向 / 状态</label>
@@ -247,7 +677,14 @@ function OrderDetailPanel({
         </div>
         <span>{trades.length} 笔</span>
       </div>
-      <MarketTradeTable trades={trades} busy={busy} onToast={onToast} />
+      <MarketTradeTable
+        trades={trades}
+        busy={busy}
+        onToast={onToast}
+        activeAddressMenu={activeAddressMenu}
+        onToggleAddressMenu={onToggleAddressMenu}
+        onOpenUserAction={onOpenUserAction}
+      />
     </div>
   )
 }
@@ -256,10 +693,16 @@ function MarketTradeTable({
   trades,
   busy,
   onToast,
+  activeAddressMenu,
+  onToggleAddressMenu,
+  onOpenUserAction,
 }: {
   trades: MarketTakerTrade[]
   busy: boolean
   onToast: (message: string) => void
+  activeAddressMenu: string | null
+  onToggleAddressMenu: (address: string | null) => void
+  onOpenUserAction: (address: string, action: UserAddressAction) => void
 }) {
   if (!busy && trades.length === 0) {
     return <div className="empty-state inline-empty">暂无成交记录。</div>
@@ -291,8 +734,26 @@ function MarketTradeTable({
               <td>{formatAmount(trade.price, { display: true, fractionDigits: 3 })} USDT</td>
               <td>{formatAmount(trade.usdtAmount, { display: true, fractionDigits: 3 })} USDT</td>
               <td>{formatTradeFee(trade)} USDT</td>
-              <td><CopyValueButton value={trade.maker} label={shortAddress(trade.maker)} onToast={onToast} /></td>
-              <td><CopyValueButton value={trade.taker} label={shortAddress(trade.taker)} onToast={onToast} /></td>
+              <td>
+                <UserAddressMenuButton
+                  address={trade.maker}
+                  menuKey={`trade-${trade.id}-maker`}
+                  activeAddressMenu={activeAddressMenu}
+                  onToggleAddressMenu={onToggleAddressMenu}
+                  onOpenUserAction={onOpenUserAction}
+                  onToast={onToast}
+                />
+              </td>
+              <td>
+                <UserAddressMenuButton
+                  address={trade.taker}
+                  menuKey={`trade-${trade.id}-taker`}
+                  activeAddressMenu={activeAddressMenu}
+                  onToggleAddressMenu={onToggleAddressMenu}
+                  onOpenUserAction={onOpenUserAction}
+                  onToast={onToast}
+                />
+              </td>
               <td><CopyValueButton value={trade.orderId} label={shortHash(trade.orderId)} onToast={onToast} /></td>
               <td><CopyValueButton value={trade.transactionHash} label={shortHash(trade.transactionHash)} onToast={onToast} /></td>
             </tr>
@@ -307,10 +768,16 @@ function MarketOrderTable({
   orders,
   busy,
   onToast,
+  activeAddressMenu,
+  onToggleAddressMenu,
+  onOpenUserAction,
 }: {
   orders: MarketOrder[]
   busy: boolean
   onToast: (message: string) => void
+  activeAddressMenu: string | null
+  onToggleAddressMenu: (address: string | null) => void
+  onOpenUserAction: (address: string, action: UserAddressAction) => void
 }) {
   if (!busy && orders.length === 0) {
     return <div className="empty-state inline-empty">暂无挂单记录。</div>
@@ -345,7 +812,16 @@ function MarketOrderTable({
               <td>{formatAmount(order.price, { display: true, fractionDigits: 3 })} USDT</td>
               <td>{formatOrderTotal(order)} USDT</td>
               <td>{order.visible ? '显示' : '隐藏'}</td>
-              <td><CopyValueButton value={order.maker} label={shortAddress(order.maker)} onToast={onToast} /></td>
+              <td>
+                <UserAddressMenuButton
+                  address={order.maker}
+                  menuKey={`order-${order.id}-maker`}
+                  activeAddressMenu={activeAddressMenu}
+                  onToggleAddressMenu={onToggleAddressMenu}
+                  onOpenUserAction={onOpenUserAction}
+                  onToast={onToast}
+                />
+              </td>
               <td><CopyValueButton value={order.id} label={shortHash(order.id)} onToast={onToast} /></td>
               <td><CopyValueButton value={order.transactionHash} label={shortHash(order.transactionHash)} onToast={onToast} /></td>
             </tr>
@@ -356,29 +832,60 @@ function MarketOrderTable({
   )
 }
 
-function Pagination({
-  page,
-  totalPages,
-  onPrev,
-  onNext,
-  disabled,
+function UserAddressMenuButton({
+  address,
+  menuKey,
+  activeAddressMenu,
+  onToggleAddressMenu,
+  onOpenUserAction,
+  onToast,
 }: {
-  page: number
-  totalPages: number
-  onPrev: () => void
-  onNext: () => void
-  disabled?: boolean
+  address: string
+  menuKey: string
+  activeAddressMenu: string | null
+  onToggleAddressMenu: (address: string | null) => void
+  onOpenUserAction: (address: string, action: UserAddressAction) => void
+  onToast: (message: string) => void
 }) {
+  const isOpen = activeAddressMenu === menuKey
+  const actions: { action: UserAddressAction; label: string }[] = [
+    { action: 'balance-logs', label: '资金记录' },
+    { action: 'miners', label: '矿机' },
+    { action: 'market-orders', label: '市场订单' },
+    { action: 'team', label: '团队' },
+  ]
+  const handleCopy = async () => {
+    onToast(await copy(address, { fallbackToPrompt: true }) ? '已复制' : '复制失败')
+    onToggleAddressMenu(null)
+  }
+
   return (
-    <div className="pager pager-split">
-      <button type="button" className="secondary pager-left" onClick={onPrev} disabled={disabled || page <= 1}>
-        上一页
+    <span className="address-menu-wrap">
+      <button
+        type="button"
+        className="copy-cell-button"
+        title={address}
+        onClick={() => onToggleAddressMenu(isOpen ? null : menuKey)}
+      >
+        {shortAddress(address)}
       </button>
-      <span className="pager-center">第 {page} / {totalPages} 页</span>
-      <button type="button" className="secondary pager-right" onClick={onNext} disabled={disabled || page >= totalPages}>
-        下一页
-      </button>
-    </div>
+      {isOpen && (
+        <span className="address-action-menu">
+          <button type="button" onClick={handleCopy}>
+            复制地址
+          </button>
+          {actions.map((item) => (
+            <button
+              key={item.action}
+              type="button"
+              onClick={() => onOpenUserAction(address, item.action)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
   )
 }
 

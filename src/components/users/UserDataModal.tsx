@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { parseUnits } from 'viem'
 import copy from 'copy-to-clipboard'
-import type { AccountMarketTrade, AccountMarketTradeStats, BalanceLogItem, MarketOrder, MinerItem, UserRecord } from '../../api'
+import type { AccountMarketTrade, BalanceLogItem, MarketOrder, MinerItem, TeamMarketTradeStats, UserRecord } from '../../api'
 import { LoadingOverlay } from '../common/LoadingOverlay'
-import type { BalanceFilters, MarketOrderFilters } from '../../hooks/useAdminData'
+import { Pagination } from '../common/Pagination'
+import type { BalanceFilters, MarketOrderFilters, MarketTradeStatsRange } from '../../hooks/useAdminData'
 import { formatAmount, formatTime, shortAddress } from '../../lib/format'
 
 const balanceLogTypeOptions = [
   { value: 'miner_reward', label: '矿机奖励' },
+  { value: 'free_miner_claim', label: '体验矿机提取' },
   { value: 'team_reward', label: '团队奖励' },
   { value: 'miner_purchase', label: '购买矿机' },
   { value: 'miner_purchase_refund', label: '购买矿机退款' },
@@ -16,6 +18,8 @@ const balanceLogTypeOptions = [
   { value: 'vip_dividend', label: 'VIP 分红' },
   { value: 'node_dividend', label: '节点分红' },
   { value: 'system_reward', label: '系统奖励' },
+  { value: 'admin_transfer_out', label: '后台转出' },
+  { value: 'admin_transfer_in', label: '后台转入' },
 ]
 
 function formatBalanceLogType(type: string) {
@@ -31,7 +35,10 @@ type UserDataModalProps = {
   miners: MinerItem[]
   marketOrders: MarketOrder[]
   marketTrades: AccountMarketTrade[]
-  marketTradeStats: AccountMarketTradeStats | null
+  marketTradeStats: TeamMarketTradeStats | null
+  marketTradeStatsRange: MarketTradeStatsRange
+  marketTradeStatsBusy?: boolean
+  marketTradeStatsError?: string
   filters: BalanceFilters
   marketOrderFilters: MarketOrderFilters
   totalLogs: number
@@ -45,6 +52,7 @@ type UserDataModalProps = {
   onClose: () => void
   onFiltersChange: (filters: BalanceFilters) => void
   onMarketOrderFiltersChange: (filters: MarketOrderFilters) => void
+  onMarketTradeStatsSearch: (range: MarketTradeStatsRange) => void
   onPageChange: (page: number) => void
   onMarketOrderPageChange: (page: number) => void
   onSearch: () => void
@@ -61,6 +69,9 @@ export function UserDataModal({
   marketOrders,
   marketTrades,
   marketTradeStats,
+  marketTradeStatsRange,
+  marketTradeStatsBusy = false,
+  marketTradeStatsError,
   filters,
   marketOrderFilters,
   totalLogs,
@@ -74,6 +85,7 @@ export function UserDataModal({
   onClose,
   onFiltersChange,
   onMarketOrderFiltersChange,
+  onMarketTradeStatsSearch,
   onPageChange,
   onMarketOrderPageChange,
   onSearch,
@@ -83,6 +95,9 @@ export function UserDataModal({
   const [accelerateAmount, setAccelerateAmount] = useState('')
   const [accelerateFormError, setAccelerateFormError] = useState('')
   const [toastMessage, setToastMessage] = useState('')
+  const [marketStatsFrom, setMarketStatsFrom] = useState('')
+  const [marketStatsTo, setMarketStatsTo] = useState('')
+  const [marketStatsFormError, setMarketStatsFormError] = useState('')
 
   useEffect(() => {
     if (!toastMessage) return
@@ -90,6 +105,14 @@ export function UserDataModal({
     const timer = window.setTimeout(() => setToastMessage(''), 1600)
     return () => window.clearTimeout(timer)
   }, [toastMessage])
+
+  useEffect(() => {
+    if (!open || mode !== 'market-orders') return
+
+    setMarketStatsFrom('')
+    setMarketStatsTo('')
+    setMarketStatsFormError('')
+  }, [open, mode, user?.id])
 
   if (!open || !user) return null
 
@@ -131,6 +154,38 @@ export function UserDataModal({
     accelerateAmountWei != null &&
     accelerateRemainingReward > 0n &&
     accelerateAmountWei > accelerateRemainingReward
+
+  const handleSearchMarketStats = () => {
+    const hasFrom = marketStatsFrom.trim().length > 0
+    const hasTo = marketStatsTo.trim().length > 0
+
+    if (hasFrom !== hasTo) {
+      setMarketStatsFormError('请选择完整的开始时间和结束时间，或留空查询所有时间。')
+      return
+    }
+
+    if (!hasFrom && !hasTo) {
+      setMarketStatsFormError('')
+      onMarketTradeStatsSearch({ from: 0, to: Math.floor(Date.now() / 1000) })
+      return
+    }
+
+    const from = Math.floor(new Date(marketStatsFrom).getTime() / 1000)
+    const to = Math.floor(new Date(marketStatsTo).getTime() / 1000)
+
+    if (Number.isNaN(from) || Number.isNaN(to)) {
+      setMarketStatsFormError('请选择有效的时间区间。')
+      return
+    }
+
+    if (to <= from) {
+      setMarketStatsFormError('结束时间必须大于开始时间。')
+      return
+    }
+
+    setMarketStatsFormError('')
+    onMarketTradeStatsSearch({ from, to })
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -182,33 +237,13 @@ export function UserDataModal({
               </div>
             </div>
             <BalanceLogTable logs={logs} busy={busy} searched={searched} />
-            <div className="pager pager-modal">
-              <div className="pager-left">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => onPageChange(Math.max(1, filters.page - 1))}
-                  disabled={busy || filters.page <= 1}
-                >
-                  上一页
-                </button>
-              </div>
-              <div className="pager-center">
-                <span>
-                  {filters.page} / {logPages}
-                </span>
-              </div>
-              <div className="pager-right">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => onPageChange(Math.min(logPages, filters.page + 1))}
-                  disabled={busy || filters.page >= logPages}
-                >
-                  下一页
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={filters.page}
+              totalPages={logPages}
+              busy={busy}
+              variant="modal"
+              onPageChange={onPageChange}
+            />
           </section>
         ) : mode === 'miners' ? (
           <section className={busy ? 'detail-section loading-scope is-loading' : 'detail-section loading-scope'}>
@@ -228,14 +263,59 @@ export function UserDataModal({
         ) : (
           <section className={busy ? 'detail-section loading-scope is-loading' : 'detail-section loading-scope'}>
             <LoadingOverlay loading={busy} />
-            <div className="summary-row">
-              <div className="summary-card">
-                <span>总买入成交数量</span>
-                <strong>{marketTradeStats ? `${formatAmount(marketTradeStats.buySpaceAmount, { display: true })} SPACE` : '-'}</strong>
+            <div className="detail-section">
+              <div className="panel-head compact-head">
+                <div>
+                  <p className="eyebrow">Trade Stats</p>
+                  <h3>成交数量统计</h3>
+                </div>
+                <span>
+                  {marketTradeStats
+                    ? `${formatTime(marketTradeStatsRange.from)} - ${formatTime(marketTradeStatsRange.to)}`
+                    : '默认所有时间'}
+                </span>
               </div>
-              <div className="summary-card">
-                <span>总卖出成交数量</span>
-                <strong>{marketTradeStats ? `${formatAmount(marketTradeStats.sellSpaceAmount, { display: true })} SPACE` : '-'}</strong>
+              <div className="detail-filters">
+                <div className="field compact">
+                  <label htmlFor="market-stats-from">开始时间</label>
+                  <input
+                    id="market-stats-from"
+                    type="datetime-local"
+                    value={marketStatsFrom}
+                    disabled={marketTradeStatsBusy}
+                    onChange={(event) => setMarketStatsFrom(event.target.value)}
+                    placeholder="留空查询所有时间"
+                  />
+                </div>
+                <div className="field compact">
+                  <label htmlFor="market-stats-to">结束时间</label>
+                  <input
+                    id="market-stats-to"
+                    type="datetime-local"
+                    value={marketStatsTo}
+                    disabled={marketTradeStatsBusy}
+                    onChange={(event) => setMarketStatsTo(event.target.value)}
+                    placeholder="留空查询所有时间"
+                  />
+                </div>
+                <div className="field compact toolbar-action">
+                  <label aria-hidden="true">&nbsp;</label>
+                  <button type="button" className="primary" disabled={marketTradeStatsBusy} onClick={handleSearchMarketStats}>
+                    {marketTradeStatsBusy ? '查询中' : '查询统计'}
+                  </button>
+                </div>
+              </div>
+              {(marketStatsFormError || marketTradeStatsError) && (
+                <p className="status error">{marketStatsFormError || marketTradeStatsError}</p>
+              )}
+              <div className={marketTradeStatsBusy ? 'summary-row loading-scope is-loading' : 'summary-row loading-scope'}>
+                <LoadingOverlay loading={marketTradeStatsBusy} />
+                <SummaryCard label="总买入" value={`${formatAmount(marketTradeStats?.totalBuySpaceAmount ?? '0', { display: true })} SPACE`} />
+                <SummaryCard label="主动买入" value={`${formatAmount(marketTradeStats?.activeBuySpaceAmount ?? '0', { display: true })} SPACE`} />
+                <SummaryCard label="被动买入" value={`${formatAmount(marketTradeStats?.passiveBuySpaceAmount ?? '0', { display: true })} SPACE`} />
+                <SummaryCard label="总卖出" value={`${formatAmount(marketTradeStats?.totalSellSpaceAmount ?? '0', { display: true })} SPACE`} />
+                <SummaryCard label="主动卖出" value={`${formatAmount(marketTradeStats?.activeSellSpaceAmount ?? '0', { display: true })} SPACE`} />
+                <SummaryCard label="被动卖出" value={`${formatAmount(marketTradeStats?.passiveSellSpaceAmount ?? '0', { display: true })} SPACE`} />
               </div>
             </div>
             <div className="detail-filters">
@@ -307,33 +387,13 @@ export function UserDataModal({
             ) : (
               <MarketTradeTable trades={marketTrades} busy={busy} onToast={setToastMessage} />
             )}
-            <div className="pager pager-modal">
-              <div className="pager-left">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => onMarketOrderPageChange(Math.max(1, marketOrderFilters.page - 1))}
-                  disabled={busy || marketOrderFilters.page <= 1}
-                >
-                  上一页
-                </button>
-              </div>
-              <div className="pager-center">
-                <span>
-                  {marketOrderFilters.page} / {marketOrderPages}
-                </span>
-              </div>
-              <div className="pager-right">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => onMarketOrderPageChange(Math.min(marketOrderPages, marketOrderFilters.page + 1))}
-                  disabled={busy || marketOrderFilters.page >= marketOrderPages}
-                >
-                  下一页
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={marketOrderFilters.page}
+              totalPages={marketOrderPages}
+              busy={busy}
+              variant="modal"
+              onPageChange={onMarketOrderPageChange}
+            />
           </section>
         )}
 
@@ -395,6 +455,15 @@ export function UserDataModal({
         </div>
       )}
       {toastMessage && <div className="copy-toast" role="status">{toastMessage}</div>}
+    </div>
+  )
+}
+
+function SummaryCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="summary-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   )
 }

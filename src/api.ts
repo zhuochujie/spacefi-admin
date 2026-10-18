@@ -20,6 +20,7 @@ export type UserRecord = {
   createdAt: number
   teamCount?: number
   teamPerformance?: string
+  marketMakerWhitelisted: boolean
 }
 
 export type UserListResponse = {
@@ -38,9 +39,132 @@ export type AccelerateMinerPayload = {
   amount: string
 }
 
+export type BatchAccelerateMinersPayload = {
+  addresses: string[]
+}
+
+export type BatchAccelerateMinersResult = {
+  inputAddressCount: number
+  matchedAccountCount: number
+  acceleratedAccountCount: number
+  acceleratedMinerCount: number
+  totalReward: string
+}
+
 export type SystemRewardPayload = {
   token: 'SPACE' | 'USDT'
   amount: string
+}
+
+export type UserTransferPayload = {
+  toAddress: string
+  token: 'SPACE' | 'USDT'
+  amount: string
+}
+
+export type UserTransferResult = {
+  from: Pick<UserRecord, 'id' | 'address' | 'balance' | 'usdtBalance'>
+  to: Pick<UserRecord, 'id' | 'address' | 'balance' | 'usdtBalance'>
+}
+
+export type DeleteUserResult = {
+  accountId: number
+  address: string
+  deleted: {
+    accountBalanceLogs: number
+    accountMiners: number
+    freeMiners: number
+    accountWithdrawSignatures: number
+    minerPurchaseSignatures: number
+    accountRelations: number
+    accounts: number
+  }
+}
+
+export type UserTeamOverview = {
+  accountId: number
+  address: string
+  refCode: string
+  vipLevel: number
+  manualVipLevel: number
+  nodeLevel: number
+  directCount: number
+  teamCount: number
+  teamPerformance: string
+  directPerformance: string
+  teamMinerBuyerCount: number
+  teamMinerCount: number
+  teamFreeMinerCount: number
+  teamReward: string
+  superiorChain: UserSuperiorChainItem[]
+}
+
+export type UserSuperiorChainItem = {
+  accountId: number
+  address: string
+  refCode: string
+  level: number
+  vipLevel: number
+  manualVipLevel: number
+  nodeLevel: number
+  createdAt: number
+}
+
+export type UserTeamBranch = {
+  accountId: number
+  address: string
+  refCode: string
+  vipLevel: number
+  manualVipLevel: number
+  nodeLevel: number
+  branchTeamCount: number
+  branchPerformance: string
+  branchMinerCount: number
+  createdAt: number
+}
+
+export type UserTeamMember = {
+  accountId: number
+  address: string
+  refCode: string
+  level: number
+  superiorAddress: string | null
+  vipLevel: number
+  manualVipLevel: number
+  nodeLevel: number
+  performance: string
+  minerCount: number
+  freeMinerCount: number
+  createdAt: number
+}
+
+export type UserTeamBranchResponse = {
+  list: UserTeamBranch[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type UserTeamMemberResponse = {
+  list: UserTeamMember[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type UserTeamAddressesResponse = {
+  addresses: string[]
+}
+
+export type UserTeamMinerPurchaseStats = {
+  accountId: number
+  totalMinerPrice: string
+  spacePaidMinerPrice: string
+  usdtPaidMinerSpacePrice: string
+  purchaseCount: number
+  buyerCount: number
+  from: number
+  to: number
 }
 
 export type BalanceLogResponse = {
@@ -116,6 +240,42 @@ export type DividendLogResponse = {
   pageSize: number
 }
 
+export type DividendRoundSummary = {
+  roundAt: number
+  totalSpaceAmount: string
+  totalUsdtAmount: string
+  vipSpaceAmount: string
+  nodeSpaceAmount: string
+  nodeUsdtAmount: string
+  fallbackCount: number
+  statCount: number
+}
+
+export type DividendLevelStat = {
+  id: number
+  roundAt: number
+  category: DividendRuleCategory
+  token: DividendRuleToken
+  level: number
+  bp: number
+  recipientCount: number
+  perUserAmount: string
+  totalAmount: string
+  fallbackUsed: boolean
+}
+
+export type DividendRoundResponse = {
+  list: DividendRoundSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type DividendRoundDetailResponse = {
+  roundAt: number
+  list: DividendLevelStat[]
+}
+
 export type AdminConfigItem = {
   key: string
   value: string
@@ -165,6 +325,11 @@ export type TodayMinerPurchaseSpaceStat = {
 
 export type CountStat = {
   count: number
+}
+
+export type UserBalanceTotalsStat = {
+  spaceBalance: string
+  usdtBalance: string
 }
 
 export type MarketOpenSpaceStat = {
@@ -225,9 +390,17 @@ export type AccountMarketTradeResponse = {
   pageSize: number
 }
 
-export type AccountMarketTradeStats = {
-  buySpaceAmount: string
-  sellSpaceAmount: string
+export type TeamMarketTradeStats = {
+  totalBuySpaceAmount: string
+  activeBuySpaceAmount: string
+  passiveBuySpaceAmount: string
+  totalSellSpaceAmount: string
+  activeSellSpaceAmount: string
+  passiveSellSpaceAmount: string
+  tradeCount: number
+  accountCount: number
+  from: number
+  to: number
 }
 
 export type MarketTradeResponse = {
@@ -250,6 +423,10 @@ export type TodayMarketTradesStat = {
   to: number
 }
 
+export type MarketTradeVolumeAdjustment = {
+  amount: string
+}
+
 export type EstimatedMinerRewardGroup = {
   minerCount: number
   accountCount: number
@@ -267,6 +444,7 @@ export type AdminStats = {
   todayMinerPurchaseSpace: TodayMinerPurchaseSpaceStat
   activeUsers: CountStat
   miners: CountStat
+  userBalanceTotals: UserBalanceTotalsStat
   estimatedMinerRewards: EstimatedMinerRewardsStat
   marketOpenSpace: MarketOpenSpaceStat
   todayMarketTrades: TodayMarketTradesStat
@@ -360,8 +538,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return parseResponse<T>(response)
 }
 
-export async function marketApiRequest<T>(path: string): Promise<T> {
-  const response = await fetch(`/market-api${path}`)
+export async function marketApiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await fetch(`/market-api${path}`, {
+    method: options.method ?? 'GET',
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  })
   return parseResponse<T>(response)
 }
 
@@ -397,6 +581,10 @@ export async function getMinersStat(token: string) {
   return apiRequest<CountStat>(`${ADMIN_API_PREFIX}/stats/miners`, { token })
 }
 
+export async function getUserBalanceTotalsStat(token: string) {
+  return apiRequest<UserBalanceTotalsStat>(`${ADMIN_API_PREFIX}/stats/user-balances`, { token })
+}
+
 export async function getMarketOpenSpaceStat(token: string) {
   void token
   return marketApiRequest<MarketOpenSpaceStat>('/stats/market-open-space')
@@ -405,6 +593,24 @@ export async function getMarketOpenSpaceStat(token: string) {
 export async function getTodayMarketTradesStat(token: string) {
   void token
   return marketApiRequest<TodayMarketTradesStat>('/stats/today-market-trades')
+}
+
+export async function getMarketTradeVolumeAdjustment(token: string) {
+  return apiRequest<MarketTradeVolumeAdjustment>(
+    `${ADMIN_API_PREFIX}/market/trade-volume-adjustment`,
+    { token },
+  )
+}
+
+export async function updateMarketTradeVolumeAdjustment(token: string, amount: string) {
+  return apiRequest<MarketTradeVolumeAdjustment>(
+    `${ADMIN_API_PREFIX}/market/trade-volume-adjustment`,
+    {
+      token,
+      method: 'PUT',
+      body: { amount },
+    },
+  )
 }
 
 export async function getRecentMarketTrades(page = 1, pageSize = 10) {
@@ -425,6 +631,19 @@ export async function getRecentMarketOrders(page = 1, pageSize = 10) {
   return marketApiRequest<MarketOrderResponse>(`/orders/recent?${params.toString()}`)
 }
 
+export async function getOpenMarketOrders(page = 1, pageSize = 10, side?: MarketOrderSide) {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  })
+
+  if (side) {
+    params.set('side', side)
+  }
+
+  return marketApiRequest<MarketOrderResponse>(`/orders/open?${params.toString()}`)
+}
+
 export async function getMarketOrderDetail(orderId: string) {
   return marketApiRequest<MarketOrderDetailResponse>(`/orders/${encodeURIComponent(orderId)}/detail`)
 }
@@ -438,6 +657,7 @@ export async function getAdminStats(token: string): Promise<AdminStats> {
     todayMinerPurchaseSpace,
     activeUsers,
     miners,
+    userBalanceTotals,
     estimatedMinerRewards,
     marketOpenSpace,
     todayMarketTrades,
@@ -445,6 +665,7 @@ export async function getAdminStats(token: string): Promise<AdminStats> {
     getTodayMinerPurchaseSpaceStat(token),
     getActiveUsersStat(token),
     getMinersStat(token),
+    getUserBalanceTotalsStat(token),
     getEstimatedMinerRewardsStat(token),
     getMarketOpenSpaceStat(token),
     getTodayMarketTradesStat(token),
@@ -454,6 +675,7 @@ export async function getAdminStats(token: string): Promise<AdminStats> {
     todayMinerPurchaseSpace,
     activeUsers,
     miners,
+    userBalanceTotals,
     estimatedMinerRewards,
     marketOpenSpace,
     todayMarketTrades,
@@ -497,6 +719,68 @@ export async function addUserSystemReward(
   )
 }
 
+export async function transferUserBalance(
+  token: string,
+  accountId: number,
+  payload: UserTransferPayload,
+) {
+  return apiRequest<UserTransferResult>(
+    `${ADMIN_API_PREFIX}/users/${accountId}/transfer`,
+    {
+      token,
+      method: 'POST',
+      body: payload,
+    },
+  )
+}
+
+export async function deleteUser(
+  token: string,
+  accountId: number,
+  confirmAddress: string,
+) {
+  return apiRequest<DeleteUserResult>(
+    `${ADMIN_API_PREFIX}/users/${accountId}`,
+    {
+      token,
+      method: 'DELETE',
+      body: { confirmAddress },
+    },
+  )
+}
+
+export async function getUserTeamOverview(token: string, accountId: number) {
+  return apiRequest<UserTeamOverview>(`${ADMIN_API_PREFIX}/users/${accountId}/team/overview`, { token })
+}
+
+export async function getUserTeamBranches(token: string, accountId: number, searchParams: URLSearchParams) {
+  return apiRequest<UserTeamBranchResponse>(`${ADMIN_API_PREFIX}/users/${accountId}/team/branches?${searchParams.toString()}`, { token })
+}
+
+export async function getUserTeamMembers(token: string, accountId: number, searchParams: URLSearchParams) {
+  return apiRequest<UserTeamMemberResponse>(`${ADMIN_API_PREFIX}/users/${accountId}/team/members?${searchParams.toString()}`, { token })
+}
+
+export async function getUserTeamAddresses(token: string, accountId: number) {
+  return apiRequest<UserTeamAddressesResponse>(`${ADMIN_API_PREFIX}/users/${accountId}/team/addresses`, { token })
+}
+
+export async function getUserTeamMinerPurchaseStats(
+  token: string,
+  accountId: number,
+  range: { from: number; to: number },
+) {
+  const params = new URLSearchParams({
+    from: String(range.from),
+    to: String(range.to),
+  })
+
+  return apiRequest<UserTeamMinerPurchaseStats>(
+    `${ADMIN_API_PREFIX}/users/${accountId}/team/miner-purchase-stats?${params.toString()}`,
+    { token },
+  )
+}
+
 export async function accelerateUserMiner(
   token: string,
   accountId: number,
@@ -505,6 +789,20 @@ export async function accelerateUserMiner(
 ) {
   return apiRequest<MinerResponse>(
     `${ADMIN_API_PREFIX}/users/${accountId}/miners/${accountMinerId}/accelerate`,
+    {
+      token,
+      method: 'POST',
+      body: payload,
+    },
+  )
+}
+
+export async function batchAccelerateAccountMiners(
+  token: string,
+  payload: BatchAccelerateMinersPayload,
+) {
+  return apiRequest<BatchAccelerateMinersResult>(
+    `${ADMIN_API_PREFIX}/miners/batch-accelerate`,
     {
       token,
       method: 'POST',
@@ -523,9 +821,25 @@ export async function getUserAccountMarketTrades(address: string, searchParams: 
   return marketApiRequest<AccountMarketTradeResponse>(`/trades/account?${searchParams.toString()}`)
 }
 
-export async function getUserAccountMarketTradeStats(address: string) {
-  const params = new URLSearchParams({ account: address })
-  return marketApiRequest<AccountMarketTradeStats>(`/trades/account/stats?${params.toString()}`)
+export async function getUserAccountMarketTradeStats(
+  address: string,
+  payload: { from: number; to: number },
+) {
+  return marketApiRequest<TeamMarketTradeStats>('/trades/accounts/stats', {
+    method: 'POST',
+    body: {
+      accounts: [address],
+      from: payload.from,
+      to: payload.to,
+    },
+  })
+}
+
+export async function getTeamMarketTradeStats(payload: { accounts: string[]; from: number; to: number }) {
+  return marketApiRequest<TeamMarketTradeStats>('/trades/accounts/stats', {
+    method: 'POST',
+    body: payload,
+  })
 }
 
 export async function getAdminMiners(token: string) {
@@ -560,6 +874,21 @@ export async function updateUserLevels(
   })
 }
 
+export async function updateMarketMakerWhitelist(
+  token: string,
+  accountId: number,
+  enabled: boolean,
+) {
+  return apiRequest<{ accountId: number; address: string; enabled: boolean }>(
+    `${ADMIN_API_PREFIX}/users/${accountId}/market-maker-whitelist`,
+    {
+      token,
+      method: 'PUT',
+      body: { enabled },
+    },
+  )
+}
+
 export async function getDividendRules(token: string) {
   return apiRequest<DividendRuleGroup[]>(`${ADMIN_API_PREFIX}/dividend-rules`, { token })
 }
@@ -579,6 +908,14 @@ export async function updateDividendRuleGroup(
 
 export async function getDividendLogs(token: string, searchParams: URLSearchParams) {
   return apiRequest<DividendLogResponse>(`${ADMIN_API_PREFIX}/dividend-logs?${searchParams.toString()}`, { token })
+}
+
+export async function getDividendRounds(token: string, searchParams: URLSearchParams) {
+  return apiRequest<DividendRoundResponse>(`${ADMIN_API_PREFIX}/dividends/rounds?${searchParams.toString()}`, { token })
+}
+
+export async function getDividendRoundDetail(token: string, roundAt: number) {
+  return apiRequest<DividendRoundDetailResponse>(`${ADMIN_API_PREFIX}/dividends/rounds/${roundAt}`, { token })
 }
 
 export async function getAdminConfigs(token: string) {

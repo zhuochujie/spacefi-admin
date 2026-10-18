@@ -2,16 +2,18 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import {
   updateDividendRuleGroup,
+  type DividendRoundSummary,
   type DividendRuleGroup,
   type DividendRuleGroupPayload,
 } from '../api'
-import { DividendLogTable } from '../components/dividends/DividendLogTable'
+import { DividendRoundDetailModal } from '../components/dividends/DividendRoundDetailModal'
+import { DividendRoundTable } from '../components/dividends/DividendRoundTable'
 import { DividendRuleModal } from '../components/dividends/DividendRuleModal'
 import { DividendRuleTable } from '../components/dividends/DividendRuleTable'
 import { useAdminOutlet } from '../hooks/useAdminOutlet'
-import { useDividendLogsQuery, useDividendRulesQuery, type DividendLogFilters } from '../hooks/useAdminData'
+import { useDividendRoundDetailQuery, useDividendRoundsQuery, useDividendRulesQuery, type DividendRoundFilters } from '../hooks/useAdminData'
 
-const defaultLogFilters: DividendLogFilters = {
+const defaultRoundFilters: DividendRoundFilters = {
   page: 1,
   pageSize: 10,
 }
@@ -19,14 +21,16 @@ const defaultLogFilters: DividendLogFilters = {
 export function DividendsPage() {
   const { token } = useAdminOutlet()
   const [editingGroup, setEditingGroup] = useState<DividendRuleGroup | null>(null)
-  const [logFilters, setLogFilters] = useState<DividendLogFilters>(defaultLogFilters)
+  const [roundFilters, setRoundFilters] = useState<DividendRoundFilters>(defaultRoundFilters)
+  const [detailRound, setDetailRound] = useState<DividendRoundSummary | null>(null)
 
   const rulesQuery = useDividendRulesQuery(token, Boolean(token))
   const ruleGroups = rulesQuery.data ?? []
   const vipGroups = ruleGroups.filter((group) => group.category === 'vip')
   const nodeGroups = ruleGroups.filter((group) => group.category === 'node')
-  const logsQuery = useDividendLogsQuery(token, logFilters, Boolean(token))
-  const logResponse = logsQuery.data
+  const roundsQuery = useDividendRoundsQuery(token, roundFilters, Boolean(token))
+  const roundResponse = roundsQuery.data
+  const detailQuery = useDividendRoundDetailQuery(token, detailRound?.roundAt ?? null, Boolean(detailRound))
 
   const updateBpMutation = useMutation({
     mutationFn: async ({ group, payload }: { group: DividendRuleGroup; payload: DividendRuleGroupPayload }) => {
@@ -69,13 +73,14 @@ export function DividendsPage() {
         }}
       />
 
-      <DividendLogTable
-        logs={logResponse?.list ?? []}
-        total={logResponse?.total ?? 0}
-        page={logFilters.page}
-        pageSize={logFilters.pageSize}
-        busy={logsQuery.isFetching}
-        onPageChange={(page) => setLogFilters((state) => ({ ...state, page }))}
+      <DividendRoundTable
+        rounds={roundResponse?.list ?? []}
+        total={roundResponse?.total ?? 0}
+        page={roundFilters.page}
+        pageSize={roundFilters.pageSize}
+        busy={roundsQuery.isFetching}
+        onPageChange={(page) => setRoundFilters((state) => ({ ...state, page }))}
+        onOpenDetail={(round) => setDetailRound(round)}
       />
 
       <DividendRuleModal
@@ -92,6 +97,15 @@ export function DividendsPage() {
           if (!editingGroup) return
           updateBpMutation.mutate({ group: editingGroup, payload })
         }}
+      />
+
+      <DividendRoundDetailModal
+        open={Boolean(detailRound)}
+        round={detailRound}
+        stats={detailQuery.data?.list ?? []}
+        busy={detailQuery.isFetching}
+        error={detailQuery.error?.message}
+        onClose={() => setDetailRound(null)}
       />
     </div>
   )

@@ -1,5 +1,6 @@
 import type { UserRecord } from '../../api'
 import { LoadingOverlay } from '../common/LoadingOverlay'
+import { Pagination } from '../common/Pagination'
 import { formatAmount, formatTime } from '../../lib/format'
 
 type UserTableProps = {
@@ -11,14 +12,23 @@ type UserTableProps = {
   sortBy: string
   sortOrder: string
   showSystemReward: boolean
+  showTransfer: boolean
   showMarketOrders: boolean
+  showTeam: boolean
+  showDelete: boolean
+  showMarketMakerWhitelist: boolean
+  marketMakerWhitelistBusyId?: number
   onPageChange: (page: number) => void
   onSortChange: (sortBy: string) => void
   onOpenEditLevels: (user: UserRecord) => void
   onOpenSystemReward: (user: UserRecord) => void
+  onOpenTransfer: (user: UserRecord) => void
   onOpenBalanceLogs: (user: UserRecord) => void
   onOpenMiners: (user: UserRecord) => void
   onOpenMarketOrders: (user: UserRecord) => void
+  onOpenTeam: (user: UserRecord) => void
+  onOpenDelete: (user: UserRecord) => void
+  onToggleMarketMakerWhitelist: (user: UserRecord) => void
 }
 
 export function UserTable({
@@ -30,14 +40,23 @@ export function UserTable({
   sortBy,
   sortOrder,
   showSystemReward,
+  showTransfer,
   showMarketOrders,
+  showTeam,
+  showDelete,
+  showMarketMakerWhitelist,
+  marketMakerWhitelistBusyId,
   onPageChange,
   onSortChange,
   onOpenEditLevels,
   onOpenSystemReward,
+  onOpenTransfer,
   onOpenBalanceLogs,
   onOpenMiners,
   onOpenMarketOrders,
+  onOpenTeam,
+  onOpenDelete,
+  onToggleMarketMakerWhitelist,
 }: UserTableProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const sortLabel = sortOrder === 'ASC' ? '升序' : '降序'
@@ -65,6 +84,7 @@ export function UserTable({
                 onSortChange={onSortChange}
               />
               <SortableTh field="nodeLevel" label="节点等级" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />
+              <th>做市白名单</th>
               <SortableTh field="balance" label="SPACE" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />
               <SortableTh field="usdtBalance" label="USDT" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />
               <SortableTh field="teamCount" label="团队人数" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />
@@ -94,6 +114,7 @@ export function UserTable({
                 <td>{user.vipLevel}</td>
                 <td>{user.manualVipLevel}</td>
                 <td>{user.nodeLevel}</td>
+                <td>{user.marketMakerWhitelisted ? '是' : '否'}</td>
                 <td>{formatAmount(user.balance, { display: true })}</td>
                 <td>{formatAmount(user.usdtBalance, { display: true })}</td>
                 <td>{user.teamCount ?? 0}</td>
@@ -109,6 +130,11 @@ export function UserTable({
                         系统奖励
                       </button>
                     )}
+                    {showTransfer && (
+                      <button type="button" className="secondary small" onClick={() => onOpenTransfer(user)}>
+                        转账
+                      </button>
+                    )}
                     <button type="button" className="secondary small" onClick={() => onOpenBalanceLogs(user)}>
                       资金记录
                     </button>
@@ -120,6 +146,36 @@ export function UserTable({
                         市场订单
                       </button>
                     )}
+                    {showTeam && (
+                      <button type="button" className="secondary small" onClick={() => onOpenTeam(user)}>
+                        团队
+                      </button>
+                    )}
+                    {showMarketMakerWhitelist && (
+                      <button
+                        type="button"
+                        className="secondary small"
+                        disabled={marketMakerWhitelistBusyId === user.id}
+                        onClick={() => onToggleMarketMakerWhitelist(user)}
+                      >
+                        {marketMakerWhitelistBusyId === user.id
+                          ? '处理中...'
+                          : user.marketMakerWhitelisted
+                            ? '移出做市白名单'
+                            : '加入做市白名单'}
+                      </button>
+                    )}
+                    {showDelete && (
+                      <button
+                        type="button"
+                        className="danger small"
+                        onClick={() => onOpenDelete(user)}
+                        disabled={(user.teamCount ?? 0) > 0}
+                        title={(user.teamCount ?? 0) > 0 ? '该用户存在下级，不能删除' : '删除用户'}
+                      >
+                        删除
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -127,28 +183,13 @@ export function UserTable({
           </tbody>
         </table>
       </div>
-      <div className="pager pager-split">
-        <div className="pager-left">
-          <button type="button" className="secondary" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={busy || page <= 1}>
-            上一页
-          </button>
-        </div>
-        <div className="pager-center">
-          <span>
-            {page} / {totalPages} · {formatSortName(sortBy)} {sortLabel}
-          </span>
-        </div>
-        <div className="pager-right">
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-            disabled={busy || page >= totalPages}
-          >
-            下一页
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        busy={busy}
+        extraInfo={`${formatSortName(sortBy)} ${sortLabel}`}
+        onPageChange={onPageChange}
+      />
     </div>
   )
 }

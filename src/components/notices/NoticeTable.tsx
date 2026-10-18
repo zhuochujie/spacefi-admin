@@ -1,5 +1,6 @@
 import type { NoticeItem } from '../../api'
 import { LoadingOverlay } from '../common/LoadingOverlay'
+import { Pagination } from '../common/Pagination'
 import { formatTime } from '../../lib/format'
 
 type NoticeTableProps = {
@@ -90,28 +91,7 @@ export function NoticeTable({
         </div>
       )}
 
-      <div className="pager pager-split">
-        <div className="pager-left">
-          <button type="button" className="secondary" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={busy || page <= 1}>
-            上一页
-          </button>
-        </div>
-        <div className="pager-center">
-          <span>
-            {page} / {totalPages}
-          </span>
-        </div>
-        <div className="pager-right">
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-            disabled={busy || page >= totalPages}
-          >
-            下一页
-          </button>
-        </div>
-      </div>
+      <Pagination page={page} totalPages={totalPages} busy={busy} onPageChange={onPageChange} />
     </section>
   )
 }

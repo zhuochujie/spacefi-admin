@@ -1,23 +1,45 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { UserRecord } from '../api'
-import { accelerateUserMiner, addUserSystemReward, updateUserLevels } from '../api'
+import {
+  accelerateUserMiner,
+  addUserSystemReward,
+  batchAccelerateAccountMiners,
+  deleteUser,
+  getTeamMarketTradeStats,
+  getUserTeamAddresses,
+  transferUserBalance,
+  updateMarketMakerWhitelist,
+  updateUserLevels,
+} from '../api'
 import {
   useUserBalanceLogsQuery,
   useUserMarketOrdersQuery,
   useUserAccountMarketTradesQuery,
   useUserAccountMarketTradeStatsQuery,
   useUserMinersQuery,
+  useUserTeamBranchesQuery,
+  useUserTeamMembersQuery,
+  useUserTeamMinerPurchaseStatsQuery,
+  useUserTeamOverviewQuery,
   useUsersQuery,
   type BalanceFilters,
   type MarketOrderFilters,
+  type MarketTradeStatsRange,
+  type TeamBranchFilters,
+  type TeamMemberFilters,
+  type TeamMinerPurchaseStatsRange,
   type UserFilters,
 } from '../hooks/useAdminData'
 import { UserDataModal } from '../components/users/UserDataModal'
 import { UserFilters as UserFiltersPanel } from '../components/users/UserFilters'
 import { UserLevelModal } from '../components/users/UserLevelModal'
 import { UserSystemRewardModal } from '../components/users/UserSystemRewardModal'
+import { UserTransferModal } from '../components/users/UserTransferModal'
+import { UserTeamModal } from '../components/users/UserTeamModal'
 import { UserTable } from '../components/users/UserTable'
+import { BatchAccelerateMinersModal } from '../components/users/BatchAccelerateMinersModal'
+import { UserDeleteModal } from '../components/users/UserDeleteModal'
 import { useAdminOutlet } from '../hooks/useAdminOutlet'
 
 const defaultUserFilters: UserFilters = {
@@ -46,6 +68,28 @@ const defaultMarketOrderFilters: MarketOrderFilters = {
   action: '',
 }
 
+const getDefaultMarketTradeStatsRange = (): MarketTradeStatsRange => ({
+  from: 0,
+  to: Math.floor(Date.now() / 1000),
+})
+
+const defaultTeamBranchFilters: TeamBranchFilters = {
+  page: 1,
+  pageSize: 10,
+}
+
+const defaultTeamMemberFilters: TeamMemberFilters = {
+  page: 1,
+  pageSize: 10,
+  level: '',
+  address: '',
+}
+
+const getDefaultTeamMinerPurchaseStatsRange = (): TeamMinerPurchaseStatsRange => ({
+  from: 0,
+  to: Math.floor(Date.now() / 1000),
+})
+
 type ModalState = {
   mode: 'balance-logs' | 'miners' | 'market-orders'
   user: UserRecord
@@ -59,10 +103,20 @@ export function UsersPage() {
   const [draftBalanceFilters, setDraftBalanceFilters] = useState<BalanceFilters>(defaultBalanceFilters)
   const [balanceFilters, setBalanceFilters] = useState<BalanceFilters>(defaultBalanceFilters)
   const [marketOrderFilters, setMarketOrderFilters] = useState<MarketOrderFilters>(defaultMarketOrderFilters)
+  const [marketTradeStatsRange, setMarketTradeStatsRange] = useState<MarketTradeStatsRange>(getDefaultMarketTradeStatsRange)
   const [balanceSearchKey, setBalanceSearchKey] = useState(0)
   const [modalState, setModalState] = useState<ModalState>(null)
   const [editUser, setEditUser] = useState<UserRecord | null>(null)
   const [rewardUser, setRewardUser] = useState<UserRecord | null>(null)
+  const [transferUser, setTransferUser] = useState<UserRecord | null>(null)
+  const [deleteTargetUser, setDeleteTargetUser] = useState<UserRecord | null>(null)
+  const [teamUser, setTeamUser] = useState<UserRecord | null>(null)
+  const [teamBranchFilters, setTeamBranchFilters] = useState<TeamBranchFilters>(defaultTeamBranchFilters)
+  const [teamMemberFilters, setTeamMemberFilters] = useState<TeamMemberFilters>(defaultTeamMemberFilters)
+  const [teamMinerPurchaseStatsRange, setTeamMinerPurchaseStatsRange] = useState<TeamMinerPurchaseStatsRange>(
+    getDefaultTeamMinerPurchaseStatsRange,
+  )
+  const [batchAccelerateOpen, setBatchAccelerateOpen] = useState(false)
 
   const usersQuery = useUsersQuery(token, userFilters, Boolean(token))
   const users = usersQuery.data?.list ?? []
@@ -86,6 +140,14 @@ export function UsersPage() {
     onSuccess: async () => {
       await usersQuery.refetch()
       setEditUser(null)
+    },
+  })
+
+  const marketMakerWhitelistMutation = useMutation({
+    mutationFn: ({ accountId, enabled }: { accountId: number; enabled: boolean }) =>
+      updateMarketMakerWhitelist(token, accountId, enabled),
+    onSuccess: async () => {
+      await usersQuery.refetch()
     },
   })
 
@@ -132,6 +194,73 @@ export function UsersPage() {
     },
   })
 
+  const transferMutation = useMutation({
+    mutationFn: async ({
+      accountId,
+      toAddress,
+      transferToken,
+      amount,
+    }: {
+      accountId: number
+      toAddress: string
+      transferToken: 'SPACE' | 'USDT'
+      amount: string
+    }) => transferUserBalance(token, accountId, { toAddress, token: transferToken, amount }),
+    onSuccess: async (_data, variables) => {
+      const refetches: Promise<unknown>[] = [usersQuery.refetch()]
+      if (
+        modalState?.mode === 'balance-logs' &&
+        modalState.user.id === variables.accountId &&
+        balanceSearchKey > 0
+      ) {
+        refetches.push(balanceLogsQuery.refetch())
+      }
+
+      await Promise.all(refetches)
+    },
+  })
+
+  const batchAccelerateMutation = useMutation({
+    mutationFn: async (addresses: string[]) => batchAccelerateAccountMiners(token, { addresses }),
+    onSuccess: async () => {
+      await usersQuery.refetch()
+    },
+  })
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async ({
+      accountId,
+      confirmAddress,
+    }: {
+      accountId: number
+      confirmAddress: string
+    }) => deleteUser(token, accountId, confirmAddress),
+    onSuccess: async (_data, variables) => {
+      await usersQuery.refetch()
+      if (modalState?.user.id === variables.accountId) {
+        setModalState(null)
+      }
+      if (teamUser?.id === variables.accountId) {
+        setTeamUser(null)
+      }
+    },
+  })
+
+  const teamMarketStatsMutation = useMutation({
+    mutationFn: async ({
+      accountId,
+      from,
+      to,
+    }: {
+      accountId: number
+      from: number
+      to: number
+    }) => {
+      const { addresses } = await getUserTeamAddresses(token, accountId)
+      return getTeamMarketTradeStats({ accounts: addresses, from, to })
+    },
+  })
+
   const balanceLogsQuery = useUserBalanceLogsQuery(
     token,
     activeUserId,
@@ -152,7 +281,17 @@ export function UsersPage() {
   )
   const accountMarketTradeStatsQuery = useUserAccountMarketTradeStatsQuery(
     modalState?.user.address ?? null,
+    marketTradeStatsRange,
     modalState?.mode === 'market-orders',
+  )
+  const teamOverviewQuery = useUserTeamOverviewQuery(token, teamUser?.id ?? null, Boolean(teamUser))
+  const teamBranchesQuery = useUserTeamBranchesQuery(token, teamUser?.id ?? null, teamBranchFilters, Boolean(teamUser))
+  const teamMembersQuery = useUserTeamMembersQuery(token, teamUser?.id ?? null, teamMemberFilters, Boolean(teamUser))
+  const teamMinerPurchaseStatsQuery = useUserTeamMinerPurchaseStatsQuery(
+    token,
+    teamUser?.id ?? null,
+    teamMinerPurchaseStatsRange,
+    Boolean(teamUser),
   )
 
   const totalUsers = usersQuery.data?.total ?? 0
@@ -173,6 +312,10 @@ export function UsersPage() {
         <h1>用户管理</h1>
       </header>
 
+      {marketMakerWhitelistMutation.error && (
+        <div className="alert error">{marketMakerWhitelistMutation.error.message}</div>
+      )}
+
       <UserFiltersPanel
         value={draftFilters}
         busy={usersQuery.isFetching}
@@ -181,6 +324,24 @@ export function UsersPage() {
           setUserFilters(draftFilters)
         }}
       />
+
+      {isAdminUser && (
+        <div className="toolbar">
+          <div className="field compact toolbar-action">
+            <label aria-hidden="true">&nbsp;</label>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                batchAccelerateMutation.reset()
+                setBatchAccelerateOpen(true)
+              }}
+            >
+              批量加速矿机
+            </button>
+          </div>
+        </div>
+      )}
 
       <section className="summary-row">
         <div className="summary-card">
@@ -205,7 +366,16 @@ export function UsersPage() {
           sortBy={userFilters.sortBy}
           sortOrder={userFilters.sortOrder}
           showSystemReward={isAdminUser}
+          showTransfer={isAdminUser}
           showMarketOrders={isAdminUser}
+          showTeam={isAdminUser}
+          showDelete={isAdminUser}
+          showMarketMakerWhitelist={isAdminUser}
+          marketMakerWhitelistBusyId={
+            marketMakerWhitelistMutation.isPending
+              ? marketMakerWhitelistMutation.variables?.accountId
+              : undefined
+          }
           onPageChange={(page) => {
             setDraftFilters((state) => ({ ...state, page }))
             setUserFilters((state) => ({ ...state, page }))
@@ -217,6 +387,10 @@ export function UsersPage() {
           }}
           onOpenEditLevels={(user: UserRecord) => setEditUser(user)}
           onOpenSystemReward={(user: UserRecord) => setRewardUser(user)}
+          onOpenTransfer={(user: UserRecord) => {
+            transferMutation.reset()
+            setTransferUser(user)
+          }}
           onOpenBalanceLogs={(user: UserRecord) => {
             setModalState({ mode: 'balance-logs', user })
             setDraftBalanceFilters(defaultBalanceFilters)
@@ -227,6 +401,24 @@ export function UsersPage() {
           onOpenMarketOrders={(user: UserRecord) => {
             setModalState({ mode: 'market-orders', user })
             setMarketOrderFilters(defaultMarketOrderFilters)
+            setMarketTradeStatsRange(getDefaultMarketTradeStatsRange())
+          }}
+          onOpenTeam={(user: UserRecord) => {
+            setTeamUser(user)
+            setTeamBranchFilters(defaultTeamBranchFilters)
+            setTeamMemberFilters(defaultTeamMemberFilters)
+            setTeamMinerPurchaseStatsRange(getDefaultTeamMinerPurchaseStatsRange())
+            teamMarketStatsMutation.reset()
+          }}
+          onOpenDelete={(user: UserRecord) => {
+            deleteUserMutation.reset()
+            setDeleteTargetUser(user)
+          }}
+          onToggleMarketMakerWhitelist={(user: UserRecord) => {
+            marketMakerWhitelistMutation.mutate({
+              accountId: user.id,
+              enabled: !user.marketMakerWhitelisted,
+            })
           }}
         />
       </section>
@@ -273,6 +465,83 @@ export function UsersPage() {
         }}
       />
 
+      <UserTransferModal
+        key={transferUser?.id ?? 'closed'}
+        open={Boolean(transferUser)}
+        user={transferUser}
+        busy={transferMutation.isPending}
+        error={transferMutation.error?.message}
+        result={transferMutation.data ?? null}
+        onClose={() => {
+          setTransferUser(null)
+          transferMutation.reset()
+        }}
+        onSubmit={({ toAddress, token: transferToken, amount }) => {
+          if (!transferUser) return
+
+          transferMutation.mutate({
+            accountId: transferUser.id,
+            toAddress,
+            transferToken,
+            amount,
+          })
+        }}
+      />
+
+      <UserDeleteModal
+        key={deleteTargetUser?.id ?? 'closed'}
+        open={Boolean(deleteTargetUser)}
+        user={deleteTargetUser}
+        busy={deleteUserMutation.isPending}
+        error={deleteUserMutation.error?.message}
+        result={deleteUserMutation.data ?? null}
+        onClose={() => {
+          setDeleteTargetUser(null)
+          deleteUserMutation.reset()
+        }}
+        onSubmit={(confirmAddress) => {
+          if (!deleteTargetUser) return
+
+          deleteUserMutation.mutate({
+            accountId: deleteTargetUser.id,
+            confirmAddress,
+          })
+        }}
+      />
+
+      <UserTeamModal
+        open={Boolean(teamUser)}
+        user={teamUser}
+        overview={teamOverviewQuery.data ?? null}
+        branches={teamBranchesQuery.data?.list ?? []}
+        members={teamMembersQuery.data?.list ?? []}
+        branchFilters={teamBranchFilters}
+        memberFilters={teamMemberFilters}
+        totalBranches={teamBranchesQuery.data?.total ?? 0}
+        totalMembers={teamMembersQuery.data?.total ?? 0}
+        marketStats={teamMarketStatsMutation.data ?? null}
+        minerPurchaseStats={teamMinerPurchaseStatsQuery.data ?? null}
+        minerPurchaseStatsRange={teamMinerPurchaseStatsRange}
+        busy={teamOverviewQuery.isFetching || teamBranchesQuery.isFetching || teamMembersQuery.isFetching || teamMinerPurchaseStatsQuery.isFetching}
+        marketStatsBusy={teamMarketStatsMutation.isPending}
+        minerPurchaseStatsBusy={teamMinerPurchaseStatsQuery.isFetching}
+        error={teamOverviewQuery.error?.message || teamBranchesQuery.error?.message || teamMembersQuery.error?.message}
+        marketStatsError={teamMarketStatsMutation.error?.message}
+        minerPurchaseStatsError={teamMinerPurchaseStatsQuery.error?.message}
+        onClose={() => {
+          setTeamUser(null)
+          teamMarketStatsMutation.reset()
+        }}
+        onQueryMarketStats={({ from, to }) => {
+          if (!teamUser) return
+          teamMarketStatsMutation.mutate({ accountId: teamUser.id, from, to })
+        }}
+        onQueryMinerPurchaseStats={setTeamMinerPurchaseStatsRange}
+        onBranchPageChange={(page) => setTeamBranchFilters((state) => ({ ...state, page }))}
+        onMemberFiltersChange={setTeamMemberFilters}
+        onMemberPageChange={(page) => setTeamMemberFilters((state) => ({ ...state, page }))}
+      />
+
       <UserDataModal
         open={Boolean(modalState)}
         title={modalState?.mode === 'miners' ? '用户矿机' : modalState?.mode === 'market-orders' ? '市场订单' : '资金记录'}
@@ -283,6 +552,9 @@ export function UsersPage() {
         marketOrders={marketOrdersQuery.data?.items ?? []}
         marketTrades={accountMarketTradesQuery.data?.items ?? []}
         marketTradeStats={accountMarketTradeStatsQuery.data ?? null}
+        marketTradeStatsRange={marketTradeStatsRange}
+        marketTradeStatsBusy={accountMarketTradeStatsQuery.isFetching}
+        marketTradeStatsError={accountMarketTradeStatsQuery.error?.message}
         filters={draftBalanceFilters}
         marketOrderFilters={marketOrderFilters}
         totalLogs={balanceLogsQuery.data?.total ?? 0}
@@ -296,6 +568,7 @@ export function UsersPage() {
         onClose={() => setModalState(null)}
         onFiltersChange={setDraftBalanceFilters}
         onMarketOrderFiltersChange={setMarketOrderFilters}
+        onMarketTradeStatsSearch={setMarketTradeStatsRange}
         onPageChange={(page) => {
           setDraftBalanceFilters((state) => ({ ...state, page }))
           setBalanceFilters((state) => ({ ...state, page }))
@@ -315,6 +588,20 @@ export function UsersPage() {
             accountMinerId: miner.id,
             amount,
           })
+        }}
+      />
+
+      <BatchAccelerateMinersModal
+        open={batchAccelerateOpen}
+        busy={batchAccelerateMutation.isPending}
+        error={batchAccelerateMutation.error?.message}
+        result={batchAccelerateMutation.data ?? null}
+        onClose={() => {
+          setBatchAccelerateOpen(false)
+          batchAccelerateMutation.reset()
+        }}
+        onSubmit={(addresses) => {
+          batchAccelerateMutation.mutate(addresses)
         }}
       />
     </div>

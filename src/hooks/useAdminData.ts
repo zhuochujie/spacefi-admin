@@ -3,6 +3,8 @@ import {
   getAdminProfile,
   getAdminStats,
   getMarketOrderDetail,
+  getMarketTradeVolumeAdjustment,
+  getOpenMarketOrders,
   getRecentMarketOrders,
   getRecentMarketTrades,
   getAdminMiners,
@@ -12,26 +14,40 @@ import {
   getAdminNotices,
   getBalanceLogs,
   getDividendLogs,
+  getDividendRoundDetail,
+  getDividendRounds,
   getDividendRules,
   getUserMiners,
+  getUserTeamBranches,
+  getUserTeamMembers,
+  getUserTeamMinerPurchaseStats,
+  getUserTeamOverview,
   getUserMarketOrders,
   getUserAccountMarketTrades,
   getUserAccountMarketTradeStats,
-  type AccountMarketTradeStats,
   type AccountMarketTradeResponse,
   type AdminConfigItem,
   type AdminMiner,
   type AdminStats,
   type BalanceLogResponse,
   type DividendLogResponse,
+  type DividendRoundDetailResponse,
+  type DividendRoundResponse,
   type DividendRuleGroup,
   type MarketOrderResponse,
+  type MarketOrderSide,
   type MarketOrderDetailResponse,
   type MarketTradeResponse,
+  type MarketTradeVolumeAdjustment,
+  type TeamMarketTradeStats,
   type MaintenanceState,
   type MinerResponse,
   type NoticeListResponse,
   type UserListResponse,
+  type UserTeamBranchResponse,
+  type UserTeamMinerPurchaseStats,
+  type UserTeamMemberResponse,
+  type UserTeamOverview,
 } from '../api'
 
 export type UserFilters = {
@@ -60,7 +76,34 @@ export type MarketOrderFilters = {
   action: string
 }
 
+export type MarketTradeStatsRange = {
+  from: number
+  to: number
+}
+
+export type TeamMinerPurchaseStatsRange = {
+  from: number
+  to: number
+}
+
+export type TeamBranchFilters = {
+  page: number
+  pageSize: number
+}
+
+export type TeamMemberFilters = {
+  page: number
+  pageSize: number
+  level: string
+  address: string
+}
+
 export type DividendLogFilters = {
+  page: number
+  pageSize: number
+}
+
+export type DividendRoundFilters = {
   page: number
   pageSize: number
 }
@@ -101,7 +144,30 @@ export function buildMarketOrderSearchParams(filters: MarketOrderFilters) {
   return params
 }
 
+export function buildTeamBranchSearchParams(filters: TeamBranchFilters) {
+  const params = new URLSearchParams()
+  params.set('page', String(filters.page))
+  params.set('pageSize', String(filters.pageSize))
+  return params
+}
+
+export function buildTeamMemberSearchParams(filters: TeamMemberFilters) {
+  const params = new URLSearchParams()
+  params.set('page', String(filters.page))
+  params.set('pageSize', String(filters.pageSize))
+  if (filters.level.trim()) params.set('level', filters.level.trim())
+  if (filters.address.trim()) params.set('address', filters.address.trim())
+  return params
+}
+
 export function buildDividendLogSearchParams(filters: DividendLogFilters) {
+  const params = new URLSearchParams()
+  params.set('page', String(filters.page))
+  params.set('pageSize', String(filters.pageSize))
+  return params
+}
+
+export function buildDividendRoundSearchParams(filters: DividendRoundFilters) {
   const params = new URLSearchParams()
   params.set('page', String(filters.page))
   params.set('pageSize', String(filters.pageSize))
@@ -149,11 +215,28 @@ export function useRecentMarketOrdersQuery(enabled: boolean, page = 1, pageSize 
   })
 }
 
+export function useOpenMarketOrdersQuery(enabled: boolean, page = 1, pageSize = 10, side?: MarketOrderSide) {
+  return useQuery<MarketOrderResponse>({
+    queryKey: ['open-market-orders', side ?? 'all', page, pageSize],
+    queryFn: () => getOpenMarketOrders(page, pageSize, side),
+    enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
 export function useMarketOrderDetailQuery(orderId: string, enabled: boolean) {
   return useQuery<MarketOrderDetailResponse>({
     queryKey: ['market-order-detail', orderId],
     queryFn: () => getMarketOrderDetail(orderId),
     enabled: enabled && Boolean(orderId),
+  })
+}
+
+export function useMarketTradeVolumeAdjustmentQuery(token: string, enabled: boolean) {
+  return useQuery<MarketTradeVolumeAdjustment>({
+    queryKey: ['admin-market-trade-volume-adjustment', token],
+    queryFn: () => getMarketTradeVolumeAdjustment(token),
+    enabled,
   })
 }
 
@@ -215,11 +298,66 @@ export function useUserAccountMarketTradesQuery(
   })
 }
 
-export function useUserAccountMarketTradeStatsQuery(address: string | null, enabled: boolean) {
-  return useQuery<AccountMarketTradeStats>({
-    queryKey: ['admin-account-market-trade-stats', address],
-    queryFn: () => getUserAccountMarketTradeStats(address!),
+export function useUserAccountMarketTradeStatsQuery(
+  address: string | null,
+  range: MarketTradeStatsRange,
+  enabled: boolean,
+) {
+  return useQuery<TeamMarketTradeStats>({
+    queryKey: ['admin-account-market-trade-stats', address, range],
+    queryFn: () => getUserAccountMarketTradeStats(address!, range),
     enabled: enabled && Boolean(address),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useUserTeamOverviewQuery(token: string, accountId: number | null, enabled: boolean) {
+  return useQuery<UserTeamOverview>({
+    queryKey: ['admin-user-team-overview', token, accountId],
+    queryFn: () => getUserTeamOverview(token, accountId!),
+    enabled: enabled && accountId !== null,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useUserTeamBranchesQuery(
+  token: string,
+  accountId: number | null,
+  filters: TeamBranchFilters,
+  enabled: boolean,
+) {
+  return useQuery<UserTeamBranchResponse>({
+    queryKey: ['admin-user-team-branches', token, accountId, filters],
+    queryFn: () => getUserTeamBranches(token, accountId!, buildTeamBranchSearchParams(filters)),
+    enabled: enabled && accountId !== null,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useUserTeamMembersQuery(
+  token: string,
+  accountId: number | null,
+  filters: TeamMemberFilters,
+  enabled: boolean,
+) {
+  return useQuery<UserTeamMemberResponse>({
+    queryKey: ['admin-user-team-members', token, accountId, filters],
+    queryFn: () => getUserTeamMembers(token, accountId!, buildTeamMemberSearchParams(filters)),
+    enabled: enabled && accountId !== null,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useUserTeamMinerPurchaseStatsQuery(
+  token: string,
+  accountId: number | null,
+  range: TeamMinerPurchaseStatsRange,
+  enabled: boolean,
+) {
+  return useQuery<UserTeamMinerPurchaseStats>({
+    queryKey: ['admin-user-team-miner-purchase-stats', token, accountId, range],
+    queryFn: () => getUserTeamMinerPurchaseStats(token, accountId!, range),
+    enabled: enabled && accountId !== null,
     placeholderData: (previous) => previous,
   })
 }
@@ -247,6 +385,24 @@ export function useDividendLogsQuery(token: string, filters: DividendLogFilters,
     queryKey: ['admin-dividend-logs', token, filters],
     queryFn: () => getDividendLogs(token, buildDividendLogSearchParams(filters)),
     enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useDividendRoundsQuery(token: string, filters: DividendRoundFilters, enabled: boolean) {
+  return useQuery<DividendRoundResponse>({
+    queryKey: ['admin-dividend-rounds', token, filters],
+    queryFn: () => getDividendRounds(token, buildDividendRoundSearchParams(filters)),
+    enabled,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useDividendRoundDetailQuery(token: string, roundAt: number | null, enabled: boolean) {
+  return useQuery<DividendRoundDetailResponse>({
+    queryKey: ['admin-dividend-round-detail', token, roundAt],
+    queryFn: () => getDividendRoundDetail(token, roundAt!),
+    enabled: enabled && roundAt !== null,
     placeholderData: (previous) => previous,
   })
 }
