@@ -32,14 +32,19 @@ export function ConfigModal({
   const isWeiConfig = config.key.endsWith('WEI')
   const isBpConfig = config.key.endsWith('BP')
   const isSecondsConfig = config.key.endsWith('SECONDS')
-  const isBooleanConfig = config.key === 'FREE_MINER_CAN_INVITE'
+  const isBooleanConfig = config.key === 'FREE_MINER_CAN_INVITE' || config.key === 'BUYBACK_ENABLED' || config.key === 'BUYBACK_MAKER_FEE_SUBSIDY_ENABLED'
+  const isAddressConfig = config.key === 'BUYBACK_FEE_RECEIVER_ADDRESS'
   const isNumericValue = /^\d+$/.test(value.trim())
   const readableValue = isWeiConfig && isNumericValue ? formatAmount(value.trim(), { display: true }) : '-'
   const readableBp = isBpConfig && isNumericValue ? formatDividendBp(Number(value.trim())) : '-'
   const readableDays = isSecondsConfig && isNumericValue ? formatSecondsAsDays(value.trim()) : '-'
   const nextValue = value.trim()
   const hasChanges = nextValue !== config.value.trim()
-  const isValidValue = isBooleanConfig ? ['0', '1'].includes(nextValue) : isNumericValue
+  const isValidValue = isAddressConfig
+    ? /^0x[a-fA-F0-9]{40}$/.test(nextValue)
+    : isBooleanConfig
+      ? ['0', '1'].includes(nextValue)
+      : isNumericValue
   const canSubmit = isValidValue && hasChanges && !busy
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -49,6 +54,11 @@ export function ConfigModal({
     if (!isValidValue) {
       if (isBooleanConfig) {
         setLocalError('该配置只能填写 1 或 0。')
+        return
+      }
+
+      if (isAddressConfig) {
+        setLocalError('请输入有效的钱包地址。')
         return
       }
 
@@ -90,10 +100,10 @@ export function ConfigModal({
               <label htmlFor="config-value">配置值</label>
               <input
                 id="config-value"
-                inputMode="numeric"
+                inputMode={isAddressConfig ? 'text' : 'numeric'}
                 value={value}
                 onChange={(event) => setValue(event.target.value)}
-                placeholder="请输入非负整数"
+                placeholder={isAddressConfig ? '请输入钱包地址' : '请输入非负整数'}
               />
               {isWeiConfig ? <span className="field-hint">对应数量：{readableValue}</span> : null}
               {isBpConfig ? <span className="field-hint">对应比例：{readableBp}</span> : null}

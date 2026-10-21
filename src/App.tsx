@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { AdminLayout } from './components/layout/AdminLayout'
 import { ConfigsPage } from './pages/ConfigsPage'
@@ -14,10 +14,13 @@ import { UsersPage } from './pages/UsersPage'
 import { AUTH_EXPIRED_EVENT, clearStoredToken, getStoredToken, storeToken } from './lib/session'
 import './App.css'
 
+const BuybackPage = lazy(() => import('./pages/BuybackPage'))
+
 function App() {
   const queryClient = useQueryClient()
   const initialToken = useMemo(() => getStoredToken(), [])
   const [token, setToken] = useState(initialToken)
+  const buybackPage = <Suspense fallback={<div className="panel">回购数据加载中...</div>}><BuybackPage /></Suspense>
 
   function handleLogin(nextToken: string) {
     storeToken(nextToken)
@@ -96,6 +99,12 @@ function App() {
         <Route index element={<MarketPage />} />
       </Route>
       <Route
+        path="/buyback"
+        element={token ? <AdminLayout token={token} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+      >
+        <Route index element={buybackPage} />
+      </Route>
+      <Route
         path="/admin"
         element={token ? <AdminLayout token={token} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
       >
@@ -108,6 +117,7 @@ function App() {
         <Route path="configs" element={<ConfigsPage />} />
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="market" element={<MarketPage />} />
+        <Route path="buyback" element={buybackPage} />
       </Route>
       <Route
         path="*"

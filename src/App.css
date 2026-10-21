@@ -219,6 +219,26 @@ dt,
   word-break: break-word;
 }
 
+.buyback-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.buyback-detail-grid > div {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.buyback-detail-grid dd {
+  margin: 6px 0 0;
+  color: var(--text-h);
+  font-weight: 700;
+}
+
 .overview-card small {
   color: var(--text);
   font-size: 12px;
@@ -1134,8 +1154,14 @@ tbody tr.selected {
 
   .dividend-form-grid,
   .notice-form-grid,
-  .miner-form-grid {
+  .miner-form-grid,
+  .buyback-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .buyback-fund-form .input-with-action {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .modal-backdrop {

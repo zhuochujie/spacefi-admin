@@ -286,6 +286,69 @@ export type MaintenanceState = {
   enabled: boolean
 }
 
+export type BuybackAdminOverview = {
+  enabled: boolean
+  availableSpace: string
+  availableUsdt: string
+  dailySellSpace: string
+  dailyMakerBuySpace: string
+  businessDate: string
+  updatedAt: number
+  sellPrice: string
+  makerPrice: string
+  sellFeeBp: string
+  makerFeeSubsidyEnabled: boolean
+  makerFeeSubsidyBp: string
+  receiverAddress: string
+  receiverAccountId: number | null
+  receiverSpaceBalance: string
+  receiverUsdtBalance: string
+  tradeCount: number
+  pendingSignatureCount: number
+}
+
+export type BuybackTradeItem = {
+  id: number
+  accountId: number
+  address: string
+  type: 'user_sell' | 'maker_buy'
+  spaceAmount: string
+  price: string
+  usdtAmount: string
+  feeAmount: string
+  subsidyAmount: string
+  receiverAmount: string
+  settledUsdtAmount: string
+  createdAt: number
+}
+
+export type BuybackSignatureItem = {
+  id: number
+  accountId: number
+  account: string
+  kind: 'deposit' | 'withdraw'
+  token: 'SPACE' | 'USDT'
+  amount: string
+  nonce: string
+  deadline: number
+  status: 'pending' | 'used' | 'unused'
+  createdAt: number
+}
+
+export type BuybackTradeResponse = {
+  list: BuybackTradeItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type BuybackSignatureResponse = {
+  list: BuybackSignatureItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export type NoticeItem = {
   id: number
   title: string
@@ -920,6 +983,32 @@ export async function getDividendRoundDetail(token: string, roundAt: number) {
 
 export async function getAdminConfigs(token: string) {
   return apiRequest<AdminConfigItem[]>(`${ADMIN_API_PREFIX}/configs`, { token })
+}
+
+export async function getBuybackAdminOverview(token: string) {
+  return apiRequest<BuybackAdminOverview>(`${ADMIN_API_PREFIX}/buyback/overview`, { token })
+}
+
+export async function getBuybackTrades(token: string, page: number, pageSize: number) {
+  return apiRequest<BuybackTradeResponse>(
+    `${ADMIN_API_PREFIX}/buyback/trades?page=${page}&pageSize=${pageSize}`,
+    { token },
+  )
+}
+
+export async function getBuybackSignatures(token: string, page: number, pageSize: number) {
+  return apiRequest<BuybackSignatureResponse>(
+    `${ADMIN_API_PREFIX}/buyback/signatures?page=${page}&pageSize=${pageSize}`,
+    { token },
+  )
+}
+
+export async function addBuybackPoolUsdt(token: string, amount: string) {
+  return apiRequest<{ before: string; addedAmount: string; availableUsdt: string; updatedAt: number }>(`${ADMIN_API_PREFIX}/buyback/pool-usdt/add`, {
+    token,
+    method: 'POST',
+    body: { amount },
+  })
 }
 
 export async function getMaintenance(token: string) {

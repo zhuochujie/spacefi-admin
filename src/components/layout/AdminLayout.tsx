@@ -102,13 +102,22 @@ export function AdminLayout({ token, onLogout }: AdminLayoutProps) {
             系统维护
           </NavLink>
           {isAdminUser ? (
-            <NavLink
-              to="/market"
-              className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
-              onClick={closeNav}
-            >
-              市场管理
-            </NavLink>
+            <>
+              <NavLink
+                to="/market"
+                className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+                onClick={closeNav}
+              >
+                市场管理
+              </NavLink>
+              <NavLink
+                to="/buyback"
+                className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+                onClick={closeNav}
+              >
+                回购管理
+              </NavLink>
+            </>
           ) : null}
         </nav>
         <div className="sidebar-footer">
