@@ -17,6 +17,7 @@ export type UserRecord = {
   balance: string
   usdtBalance: string
   nodeLevel: number
+  isMarketMaker: boolean
   createdAt: number
   teamCount?: number
   teamPerformance?: string

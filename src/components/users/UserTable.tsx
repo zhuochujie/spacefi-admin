@@ -84,6 +84,13 @@ export function UserTable({
                 onSortChange={onSortChange}
               />
               <SortableTh field="nodeLevel" label="节点等级" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />
+              <SortableTh
+                field="isMarketMaker"
+                label="做市商"
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSortChange={onSortChange}
+              />
               <th>做市白名单</th>
               <SortableTh field="balance" label="SPACE" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />
               <SortableTh field="usdtBalance" label="USDT" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />
@@ -114,6 +121,7 @@ export function UserTable({
                 <td>{user.vipLevel}</td>
                 <td>{user.manualVipLevel}</td>
                 <td>{user.nodeLevel}</td>
+                <td>{user.isMarketMaker ? '是' : '否'}</td>
                 <td>{user.marketMakerWhitelisted ? '是' : '否'}</td>
                 <td>{formatAmount(user.balance, { display: true })}</td>
                 <td>{formatAmount(user.usdtBalance, { display: true })}</td>
@@ -236,6 +244,7 @@ function formatSortName(sortBy: string) {
     vipLevel: 'VIP等级',
     manualVipLevel: '指定VIP等级',
     nodeLevel: '节点等级',
+    isMarketMaker: '做市商',
     teamCount: '团队人数',
     teamPerformance: '团队业绩',
   }
